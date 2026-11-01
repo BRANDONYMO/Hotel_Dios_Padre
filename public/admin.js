@@ -1447,3 +1447,435 @@ document.querySelectorAll('aside nav a, aside nav button, aside nav ul li').forE
         }
     });
 });
+
+// =========================================================
+// MÓDULO IV. FORMAS DE PAGO (INYECTADO AL FINAL SIN CHOCAR)
+// =========================================================
+var listaPagosReserva = [];
+var catalogoHabitacionesPago = [];
+var totalReservacionCalculado = 0;
+
+async function cargarPreciosHabitacionesPago() {
+  try {
+    catalogoHabitacionesPago = await api('/habitaciones');
+  } catch (e) {
+    catalogoHabitacionesPago = [];
+  }
+}
+
+function calcularNochesEstancia() {
+  const f = document.getElementById('reservaForm');
+  if (!f || !f.fechaInicio?.value || !f.fechaFin?.value) return 1;
+  const inicio = new Date(f.fechaInicio.value);
+  const fin = new Date(f.fechaFin.value);
+  const diff = Math.round((fin - inicio) / 86400000);
+  return diff > 0 ? diff : 1;
+}
+
+function recalcularSaldosPago() {
+  const checks = [
+    ...document.querySelectorAll('input[name=habitacionIds]:checked'),
+  ].map((x) => Number(x.value));
+  const noches = calcularNochesEstancia();
+
+  let sumaHabitaciones = 0;
+  checks.forEach((idHab) => {
+    const hab = catalogoHabitacionesPago.find((h) => Number(h.id) === idHab);
+    const precio = Number(hab?.tipo?.precio ?? hab?.precio ?? 0);
+    sumaHabitaciones += precio * noches;
+  });
+
+  const inputManual = document.getElementById('pago_total_manual');
+  if (sumaHabitaciones > 0) {
+    totalReservacionCalculado = sumaHabitaciones;
+    if (inputManual) inputManual.value = sumaHabitaciones.toFixed(2);
+  } else if (inputManual && inputManual.value) {
+    totalReservacionCalculado = parseFloat(inputManual.value) || 0;
+  } else {
+    totalReservacionCalculado = 0;
+  }
+
+  const totalPagado = listaPagosReserva.reduce(
+    (acc, p) => acc + Number(p.importe || 0),
+    0,
+  );
+  const saldoPendiente = Math.max(0, totalReservacionCalculado - totalPagado);
+
+  const elTotal = document.getElementById('resumen_total_reserva');
+  const elPagado = document.getElementById('resumen_total_pagado');
+  const elSaldo = document.getElementById('resumen_saldo_pendiente');
+
+  if (elTotal) elTotal.textContent = '$' + totalReservacionCalculado.toFixed(2);
+  if (elPagado) elPagado.textContent = '$' + totalPagado.toFixed(2);
+  if (elSaldo) elSaldo.textContent = '$' + saldoPendiente.toFixed(2);
+}
+
+function cambiarMetodoPagoUI() {
+  const metodo = document.getElementById('pago_metodo')?.value || '';
+  const campoTerm = document.getElementById('wrap_terminacion_tarjeta');
+  const inputTerm = document.getElementById('pago_terminacion');
+  const lblBanco = document.getElementById('lbl_pago_banco');
+  const lblRef = document.getElementById('lbl_pago_referencia');
+
+  const esTarjeta =
+    metodo === 'Tarjeta de débito' || metodo === 'Tarjeta de crédito';
+  if (campoTerm) campoTerm.style.display = esTarjeta ? '' : 'none';
+  if (!esTarjeta && inputTerm) inputTerm.value = '';
+
+  if (lblBanco) {
+    lblBanco.textContent =
+      metodo === 'Transferencia bancaria' ? 'Banco receptor *' : 'Banco *';
+  }
+  if (lblRef) {
+    lblRef.textContent = esTarjeta
+      ? 'Referencia / Núm. operación (opcional)'
+      : 'Número o referencia de operación *';
+  }
+}
+
+function registrarPagoEnLista() {
+  const metodo = document.getElementById('pago_metodo')?.value || '';
+  const importe = parseFloat(document.getElementById('pago_importe')?.value);
+  const banco = (document.getElementById('pago_banco')?.value || '').trim();
+  const fecha = document.getElementById('pago_fecha')?.value || '';
+  const terminacion = (
+    document.getElementById('pago_terminacion')?.value || ''
+  ).trim();
+  const referencia = (
+    document.getElementById('pago_referencia')?.value || ''
+  ).trim();
+
+  if (!metodo) return alert('Selecciona una forma de pago.');
+  if (isNaN(importe) || importe <= 0)
+    return alert('Ingresa un importe válido mayor a 0.');
+  if (!banco) return alert('Ingresa el banco.');
+  if (!fecha) return alert('Ingresa la fecha del pago.');
+
+  const esTarjeta =
+    metodo === 'Tarjeta de débito' || metodo === 'Tarjeta de crédito';
+  if (esTarjeta && !/^\d{4}$/.test(terminacion)) {
+    return alert(
+      'Por seguridad, ingresa exactamente los últimos 4 dígitos numéricos de la tarjeta.',
+    );
+  }
+  if (!esTarjeta && !referencia) {
+    return alert('Ingresa el número o referencia de operación.');
+  }
+
+  listaPagosReserva.push({
+    idTemp: Date.now(),
+    metodo_pago: metodo,
+    importe: Number(importe.toFixed(2)),
+    banco,
+    fecha_pago: fecha,
+    terminacion_tarjeta: esTarjeta ? terminacion : null,
+    referencia: referencia || null,
+  });
+
+  document.getElementById('pago_importe').value = '';
+  document.getElementById('pago_banco').value = '';
+  document.getElementById('pago_terminacion').value = '';
+  document.getElementById('pago_referencia').value = '';
+
+  renderTablaPagosReserva();
+}
+
+function quitarPagoDeLista(idTemp) {
+  listaPagosReserva = listaPagosReserva.filter((p) => p.idTemp !== idTemp);
+  renderTablaPagosReserva();
+}
+
+function renderTablaPagosReserva() {
+  const tbody = document.getElementById('tbody_pagos_reserva');
+  if (!tbody) return;
+
+  if (!listaPagosReserva.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="6" style="text-align:center;color:#666;">Aún no se han registrado pagos para esta reservación.</td></tr>';
+  } else {
+    tbody.innerHTML = listaPagosReserva
+      .map(
+        (p) => `
+      <tr>
+        <td>${esc(p.metodo_pago)}</td>
+        <td>${esc(p.banco)}</td>
+        <td>${p.terminacion_tarjeta ? '**** ' + esc(p.terminacion_tarjeta) : '-'}</td>
+        <td>${esc(p.referencia || '-')}</td>
+        <td>${esc(p.fecha_pago)}</td>
+        <td><strong>$${Number(p.importe).toFixed(2)}</strong></td>
+        <td><button type="button" class="primary danger" style="padding:4px 8px;" onclick="quitarPagoDeLista(${p.idTemp})">Quitar</button></td>
+      </tr>
+    `,
+      )
+      .join('');
+  }
+  recalcularSaldosPago();
+}
+
+// Sobrescribimos limpiamente formularioReservaHtml agregando el Paso 4
+window.formularioReservaHtml = function (titulo) {
+  const hoy = fechaLocal();
+  setTimeout(() => {
+    cargarPreciosHabitacionesPago().then(() => renderTablaPagosReserva());
+  }, 50);
+
+  return `<section class="reservation-hero"><div><p class=eyebrow>Atención presencial</p><h2>${titulo}</h2><p>Captura al cliente, consulta disponibilidad y confirma su habitación inmediatamente.</p></div><div class=instant-badge>Confirmación Inmediata</div></section>
+  <div class="box reservation-form-box">
+    <form id=reservaForm>
+      <input type=hidden name=id>
+      <input type=hidden name=huespedId>
+      <fieldset>
+        <legend>1. Datos del cliente</legend>
+        <div class=form-grid>
+          ${campo('Nombre *', '<input name=nombre placeholder="Ej. María" required>')}
+          ${campo('Apellido paterno *', '<input name=apellidoPaterno placeholder="Ej. Hernández" required>')}
+          ${campo('Apellido materno', '<input name=apellidoMaterno placeholder="Ej. López">')}
+          ${campo('Teléfono *', '<input name=telefono type=tel placeholder="Ej. 772 123 4567" required>')}
+          ${campo('Correo electrónico', '<input name=correo type=email placeholder="cliente@correo.com">')}
+          ${campo('Identificación', '<input name=identificacion placeholder="INE o pasaporte">')}
+          ${campo('Dirección', '<textarea name=direccion placeholder="Domicilio del cliente"></textarea>', 'wide')}
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>2. Datos de la estancia</legend>
+        <div class=form-grid>
+          ${campo('Fecha de entrada *', '<input name=fechaInicio type=date required onchange="recalcularSaldosPago()">')}
+          ${campo('Fecha de salida *', '<input name=fechaFin type=date required onchange="recalcularSaldosPago()">')}
+          ${campo('Adultos *', '<input name=adultos type=number min=1 value=1 required>')}
+          ${campo('Menores', '<input name=menores type=number min=0 value=0>')}
+        </div>
+        <div class="form-btn-container">
+          <button type=button class="btn-search action-btn" onclick="buscarDisponibles()"><i class="fa-solid fa-magnifying-glass"></i> Buscar habitaciones</button>
+        </div>
+      </fieldset>
+    </form>
+
+    <section class=room-selection onchange="recalcularSaldosPago()">
+      <h3>3. Selecciona la habitación</h3>
+      <p class=helper>Las fotografías te ayudarán a identificar cada habitación.</p>
+      <div id=availableRooms class="available-grid empty-selection">Primero selecciona las fechas y busca disponibilidad.</div>
+    </section>
+
+    <section class=room-selection style="margin-top:24px; border-top:1px solid #e2e8f0; padding-top:20px;">
+      <h3>4. Formas de pago (Obligatorio)</h3>
+      <p class=helper style="background:#fff3cd; color:#664d03; padding:10px 12px; border-radius:6px; border:1px solid #ffecb5;">
+        <i class="fa-solid fa-shield-halved"></i> <strong>Seguridad:</strong> No ingreses ni almacenes números completos de tarjeta ni CVV. Registra únicamente los últimos 4 dígitos.
+      </p>
+
+      <div class=form-grid style="margin-top:12px;">
+        <label class="form-field">
+          <span>Forma de pago *</span>
+          <select id="pago_metodo" onchange="cambiarMetodoPagoUI()">
+            <option value="">Selecciona opción...</option>
+            <option value="Tarjeta de débito">1. Tarjeta de débito</option>
+            <option value="Tarjeta de crédito">2. Tarjeta de crédito</option>
+            <option value="Transferencia bancaria">3. Transferencia bancaria</option>
+            <option value="Depósito bancario">4. Depósito bancario</option>
+          </select>
+        </label>
+
+        <label class="form-field">
+          <span>Importe ($) *</span>
+          <input id="pago_importe" type="number" min="0.01" step="0.01" placeholder="Ej. 1500.00">
+        </label>
+
+        <label class="form-field">
+          <span id="lbl_pago_banco">Banco *</span>
+          <input id="pago_banco" type="text" placeholder="Ej. BBVA, Banamex, Santander">
+        </label>
+
+        <label class="form-field">
+          <span>Fecha del pago *</span>
+          <input id="pago_fecha" type="date" data-allow-past value="${hoy}">
+        </label>
+
+        <label class="form-field" id="wrap_terminacion_tarjeta" style="display:none;">
+          <span>Terminación tarjeta (últimos 4 dígitos) *</span>
+          <input id="pago_terminacion" type="text" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" placeholder="Ej. 4821" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,4)">
+        </label>
+
+        <label class="form-field">
+          <span id="lbl_pago_referencia">Número o referencia de operación</span>
+          <input id="pago_referencia" type="text" placeholder="Folio / autorización / referencia">
+        </label>
+
+        <label class="form-field">
+          <span>Total de reservación ($)</span>
+          <input id="pago_total_manual" type="number" min="0" step="0.01" placeholder="Se calcula al elegir hab." oninput="recalcularSaldosPago()">
+        </label>
+      </div>
+
+      <div class="form-btn-container" style="margin-top:12px;">
+        <button type="button" class="primary" onclick="registrarPagoEnLista()">
+          <i class="fa-solid fa-plus"></i> Agregar pago a la reservación
+        </button>
+      </div>
+
+      <div class="box table-wrap" style="margin-top:14px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Forma de pago</th>
+              <th>Banco</th>
+              <th>Terminación</th>
+              <th>Referencia / Operación</th>
+              <th>Fecha</th>
+              <th>Importe</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbody_pagos_reserva"></tbody>
+        </table>
+      </div>
+
+      <div class="cards" style="margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
+        <div class="card" style="padding:12px; background:#f8fafc; border-radius:8px; border:1px solid #cbd5e1;">
+          <span>Total de reservación</span>
+          <strong id="resumen_total_reserva" style="display:block; font-size:1.3rem; color:#0f172a;">$0.00</strong>
+        </div>
+        <div class="card" style="padding:12px; background:#f0fdf4; border-radius:8px; border:1px solid #bbf7d0;">
+          <span>Total pagado</span>
+          <strong id="resumen_total_pagado" style="display:block; font-size:1.3rem; color:#166534;">$0.00</strong>
+        </div>
+        <div class="card" style="padding:12px; background:#fef2f2; border-radius:8px; border:1px solid #fecaca;">
+          <span>Saldo pendiente</span>
+          <strong id="resumen_saldo_pendiente" style="display:block; font-size:1.3rem; color:#991b1b;">$0.00</strong>
+        </div>
+      </div>
+    </section>
+
+    <div class=reservation-submit>
+      <span class=confirmation-note>✓ Se guardará como <strong>Confirmada</strong></span>
+      <button class="primary create-button" onclick="guardarReserva()"><i class="fa-solid fa-floppy-disk"></i> Crear reservación</button>
+      <button class="primary danger" type="button" onclick="limpiarReservaActual()"><i class="fa-solid fa-broom"></i> Limpiar</button>
+    </div>
+  </div>`;
+};
+
+// Sobrescribimos guardarReserva para exigir al menos un pago y enviarlo al backend
+window.guardarReserva = async function () {
+  const f = reservaForm;
+  if (!f.reportValidity()) return;
+  const ids = [
+    ...document.querySelectorAll('input[name=habitacionIds]:checked'),
+  ].map((x) => Number(x.value));
+  if (!ids.length) return alert('Selecciona al menos una habitación');
+  if (!listaPagosReserva.length) {
+    return alert(
+      'Toda reservación debe contar obligatoriamente con al menos una forma de pago registrada (Paso 4).',
+    );
+  }
+
+  const totalPagado = listaPagosReserva.reduce(
+    (acc, p) => acc + Number(p.importe || 0),
+    0,
+  );
+  const saldoPendiente = Math.max(0, totalReservacionCalculado - totalPagado);
+
+  const d = {
+    huespedId: Number(f.huespedId.value) || undefined,
+    huesped: {
+      nombre: f.nombre.value,
+      apellidoPaterno: f.apellidoPaterno.value,
+      apellidoMaterno: f.apellidoMaterno.value,
+      telefono: f.telefono.value,
+      correo: f.correo.value,
+      identificacion: f.identificacion.value,
+      direccion: f.direccion.value,
+    },
+    fechaInicio: f.fechaInicio.value,
+    fechaFin: f.fechaFin.value,
+    adultos: Number(f.adultos.value),
+    menores: Number(f.menores.value),
+    habitacionIds: ids,
+    confirmar: true,
+    totalReservacion: totalReservacionCalculado,
+    totalPagado: totalPagado,
+    saldoPendiente: saldoPendiente,
+    pagos: listaPagosReserva.map(({ idTemp, ...resto }) => resto),
+  };
+
+  const id = f.id.value;
+  await api(id ? `/reservaciones/${id}` : '/reservaciones', {
+    method: id ? 'PATCH' : 'POST',
+    body: JSON.stringify(d),
+  });
+  alert(id ? 'Reservación actualizada' : 'Reservación creada correctamente');
+  listaPagosReserva = [];
+  origenReserva === 'recepcion' ? recepcion() : reservaciones();
+};
+// Mostrar Total / Pagado / Saldo en cada tarjeta de reservación y cargar pagos al editar
+window.reservaCard = function (r) {
+  const totalRes = Number(r.total_reservacion || 0);
+  const totalPag = Number(r.total_pagado || 0);
+  const saldoPend = Number(
+    r.saldo_pendiente ?? Math.max(0, totalRes - totalPag),
+  );
+  const pagosHtml = (r.pagos_detalle || [])
+    .map(
+      (p) =>
+        `<small style="display:block; color:#334155;">• ${esc(p.metodo_pago)} (${esc(p.banco)}${p.terminacion_tarjeta ? ' ****' + esc(p.terminacion_tarjeta) : ''}): <strong>$${Number(p.importe).toFixed(2)}</strong></small>`,
+    )
+    .join('');
+
+  return `<article class=reservation-card>
+    <div>
+      <span class=folio>${esc(r.folio)}</span>
+      <span class="status status-${String(r.estado).toLowerCase().replaceAll(' ', '-')}">${esc(r.estado)}</span>
+    </div>
+    <h3>${esc(r.huesped_nombre)} ${esc(r.huesped_apellido || '')}</h3>
+    <p>${esc(String(r.fecha_inicio).slice(0, 10))} → ${esc(String(r.fecha_fin).slice(0, 10))}</p>
+    <div class=selected-rooms>${detalleHabitaciones(r.habitaciones_detalle)}</div>
+    <div style="margin:8px 0; padding:8px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0; font-size:0.85rem;">
+      <div>Total reservación: <strong>$${totalRes.toFixed(2)}</strong></div>
+      <div style="color:#166534;">Total pagado: <strong>$${totalPag.toFixed(2)}</strong></div>
+      <div style="color:${saldoPend > 0 ? '#991b1b' : '#166534'};">Saldo pendiente: <strong>$${saldoPend.toFixed(2)}</strong></div>
+      ${pagosHtml ? `<div style="margin-top:6px; border-top:1px dashed #cbd5e1; padding-top:4px;">${pagosHtml}</div>` : ''}
+    </div>
+    <small>Registró: ${esc(r.recepcionista_nombre || 'Recepción')}</small>
+    <div class=actions>
+      ${!['Cancelada', 'Finalizada'].includes(r.estado) ? `<button class="primary edit-button" onclick='editarReserva(${JSON.stringify(r).replace(/'/g, '&#39;')})'><i class="fa-solid fa-pen-to-square"></i> Editar</button><button class="primary danger" onclick="cambiarReserva(${r.id},'Cancelada')"><i class="fa-solid fa-ban"></i> Cancelar</button>` : ''}
+      <button class="primary danger" onclick="eliminarReserva(${r.id})"><i class="fa-solid fa-trash-can"></i> Eliminar</button>
+    </div>
+  </article>`;
+};
+
+window.editarReserva = async function (r) {
+  const destino = origenReserva;
+  const huesped = await api(`/huespedes/${r.huesped_id}`);
+  if (destino === 'recepcion') {
+    await recepcion();
+    mostrarRecepcionTab('nueva');
+  } else {
+    await reservaciones();
+  }
+  const f = reservaForm;
+  f.id.value = r.id;
+  f.huespedId.value = r.huesped_id;
+  [
+    'nombre',
+    'apellidoPaterno',
+    'apellidoMaterno',
+    'telefono',
+    'correo',
+    'identificacion',
+    'direccion',
+  ].forEach((campo) => (f[campo].value = huesped[campo] || ''));
+  f.fechaInicio.value = String(r.fecha_inicio).slice(0, 10);
+  f.fechaFin.value = String(r.fecha_fin).slice(0, 10);
+  f.adultos.value = r.adultos;
+  f.menores.value = r.menores;
+  await buscarDisponibles();
+
+  listaPagosReserva = (r.pagos_detalle || []).map((p, idx) => ({
+    idTemp: Date.now() + idx,
+    metodo_pago: p.metodo_pago,
+    importe: Number(p.importe),
+    banco: p.banco,
+    fecha_pago: String(p.fecha_pago).slice(0, 10),
+    terminacion_tarjeta: p.terminacion_tarjeta || null,
+    referencia: p.referencia || null,
+  }));
+  renderTablaPagosReserva();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};

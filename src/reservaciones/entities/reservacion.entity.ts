@@ -1,12 +1,13 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
+import { Pago } from './pago.entity';
+
 @Entity('reservaciones')
 export class Reservacion {
   @PrimaryGeneratedColumn() id: number;
   @Column({ nullable: true }) folio: string;
   @Column({ name: 'huesped_id', nullable: true }) huespedId: number;
   @Column({ name: 'usuario_id', nullable: true }) usuarioId: number;
-  @Column({ name: 'fecha_inicio', type: 'date', nullable: true })
-  fechaInicio: string;
+  @Column({ name: 'fecha_inicio', type: 'date', nullable: true }) fechaInicio: string;
   @Column({ name: 'fecha_fin', type: 'date', nullable: true }) fechaFin: string;
   @Column({ nullable: true }) adultos: number;
   @Column({ nullable: true }) menores: number;
@@ -23,4 +24,7 @@ export class Reservacion {
     update: false,
   })
   createdAt: Date;
+
+  @OneToMany(() => Pago, (pago) => pago.reservacion, { cascade: true })
+  pagos: Pago[];
 }
