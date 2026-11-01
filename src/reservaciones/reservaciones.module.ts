@@ -5,6 +5,7 @@ import { EstadoHabitacion } from '../habitaciones/entities/estado-habitacion.ent
 import { Habitacion } from '../habitaciones/entities/habitacion.entity';
 import { ReservacionHabitacion } from './entities/reservacion-habitacion.entity';
 import { Reservacion } from './entities/reservacion.entity';
+import { Pago } from './entities/pago.entity';
 import { ReservacionesController } from './reservaciones.controller';
 import { ReservacionesService } from './reservaciones.service';
 
@@ -16,6 +17,7 @@ import { ReservacionesService } from './reservaciones.service';
       Habitacion,
       EstadoHabitacion,
       Huesped,
+      Pago,
     ]),
   ],
   providers: [ReservacionesService],
