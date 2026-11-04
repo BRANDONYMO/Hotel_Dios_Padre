@@ -20,3 +20,9 @@ Conserva la regla existente de pago obligatorio. Un límite menor no recalcula r
 - ESLint dirigido: sin errores ni advertencias en los archivos de permisos, autenticación, configuración y usuarios.
 
 Se corrigió el selector de login que impedía el acceso web del Superadministrador. Capturas e informe en `docs/VALIDACION_FUNCIONAL_SUPERADMIN.md`. Sin acceso a producción: pendiente ensayo contra una copia MySQL real. Sin merge ni despliegue en Railway.
+
+## Regresión de cortesía inválida
+
+Validación visual inmediata antes de calcular; los valores inválidos muestran un error, bloquean el guardado y dejan descuento, neto y saldo sin importe en Reservaciones/Recepción y sus editores. También se evita heredar pagos entre formularios nuevos. El backend mantiene sus controles independientes.
+
+Última validación: build, 79 pruebas unitarias, 2 e2e y 468 comprobaciones de integración con Chromium aprobadas. Capturas y reproducción: `docs/REGRESION_CORTESIA_INVALIDA.md`. Sin nuevas migraciones.

@@ -238,7 +238,7 @@ const { syntheticSchema } = require('./helpers/cortesias-fixture.cjs');
         },
       ],
     };
-    for (const value of [20.01, -1, 101, null, '20', 0.001])
+    for (const value of [20.01, 44444444, -1, 101, null, '20', 0.001])
       await api(
         '/reservaciones',
         admin,
@@ -411,7 +411,7 @@ const { syntheticSchema } = require('./helpers/cortesias-fixture.cjs');
         resultado: 'APROBADO',
       });
     }
-    for (const value of [-1, 101, null, '', '30', true, {}, [], 0.001]) {
+    for (const value of [-1, 44444444, 101, null, '', '30', true, {}, [], 0.001]) {
       await api(
         '/configuracion/cortesias',
         superadmin,
@@ -437,6 +437,17 @@ const { syntheticSchema } = require('./helpers/cortesias-fixture.cjs');
         baseURL: `http://127.0.0.1:${port}`,
         password,
         matrix,
+      });
+      await db.execute(
+        "INSERT INTO habitaciones (numero, piso, tipo_id, estado_id, activa) SELECT 'TEST-REG', 1, ?, id, 1 FROM estados_habitacion WHERE nombre='Disponible' LIMIT 1",
+        [type.insertId],
+      );
+      const {
+        inputBrowserChecks,
+      } = require('./helpers/cortesias-input-browser.cjs');
+      browserCount += await inputBrowserChecks({
+        baseURL: `http://127.0.0.1:${port}`,
+        password,
       });
       checks += browserCount;
     }

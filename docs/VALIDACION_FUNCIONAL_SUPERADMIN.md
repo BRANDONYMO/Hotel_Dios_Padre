@@ -1,5 +1,8 @@
 # Validación funcional — PR #4 (Draft)
 
+Actualización posterior: ver [regresión de cortesía inválida](REGRESION_CORTESIA_INVALIDA.md)
+para la corrección del total negativo y la última ejecución de 468 comprobaciones.
+
 **Resultado:** listo para revisión técnica con las correcciones de este informe.
 No se autoriza ni se realiza merge. Se confirmó con el usuario que el pago sigue siendo obligatorio incluso con
 cortesía de 100%. Antes del merge se recomienda ensayar en MySQL con un esquema

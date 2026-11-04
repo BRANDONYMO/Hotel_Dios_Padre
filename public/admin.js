@@ -1479,44 +1479,66 @@ function calcularNochesEstancia() {
 }
 
 function recalcularSaldosPago() {
-  const checks = [
-    ...document.querySelectorAll('input[name=habitacionIds]:checked'),
-  ].map((x) => Number(x.value));
-  const noches = calcularNochesEstancia();
-
-  let sumaHabitaciones = 0;
-  checks.forEach((idHab) => {
-    const hab = catalogoHabitacionesPago.find((h) => Number(h.id) === idHab);
-    const precio = Number(hab?.tipo?.precio ?? hab?.precio ?? 0);
-    sumaHabitaciones += precio * noches;
+  const input = document.querySelector('[name=cortesiaPorcentaje]');
+  if (!input) return false;
+  const maximo =
+    input.dataset.maximoAutorizado === undefined
+      ? null
+      : Number(input.dataset.maximoAutorizado);
+  const validacion = CortesiasUI.validarPorcentaje(
+    input.value,
+    maximo,
+    input.validity.badInput,
+  );
+  if (input.dataset.errorLimite) {
+    validacion.valido = false;
+    validacion.mensaje = input.dataset.errorLimite;
+  }
+  input.setCustomValidity(validacion.mensaje);
+  input.setAttribute('aria-invalid', String(!validacion.valido));
+  const error = document.getElementById('errorCortesia');
+  if (error) {
+    error.textContent = validacion.mensaje;
+    error.hidden = validacion.valido;
+  }
+  document.querySelectorAll('[data-guardar-reserva]').forEach((button) => {
+    button.disabled = !validacion.valido;
   });
 
-  const inputManual = document.getElementById('pago_total_manual');
-  if (sumaHabitaciones > 0) {
-    totalReservacionCalculado = sumaHabitaciones;
-    if (inputManual) inputManual.value = sumaHabitaciones.toFixed(2);
-  } else if (inputManual && inputManual.value) {
-    totalReservacionCalculado = parseFloat(inputManual.value) || 0;
-  } else {
-    totalReservacionCalculado = 0;
-  }
-
-  const cortesia = Number(document.querySelector('[name=cortesiaPorcentaje]')?.value || 0);
-  totalReservacionCalculado = Math.round(totalReservacionCalculado * (1 - cortesia / 100) * 100) / 100;
-
+  const noches = calcularNochesEstancia();
+  const subtotal = [
+    ...document.querySelectorAll('input[name=habitacionIds]:checked'),
+  ].reduce((suma, checkbox) => {
+    const hab = catalogoHabitacionesPago.find(
+      (h) => Number(h.id) === Number(checkbox.value),
+    );
+    const precio = Number(hab?.tipo?.precio ?? hab?.precio ?? 0);
+    return (
+      suma + (Number.isFinite(precio) && precio >= 0 ? precio * noches : 0)
+    );
+  }, 0);
   const totalPagado = listaPagosReserva.reduce(
-    (acc, p) => acc + Number(p.importe || 0),
+    (suma, p) => suma + Number(p.importe || 0),
     0,
   );
-  const saldoPendiente = Math.max(0, totalReservacionCalculado - totalPagado);
-
-  const elTotal = document.getElementById('resumen_total_reserva');
-  const elPagado = document.getElementById('resumen_total_pagado');
-  const elSaldo = document.getElementById('resumen_saldo_pendiente');
-
-  if (elTotal) elTotal.textContent = '$' + totalReservacionCalculado.toFixed(2);
-  if (elPagado) elPagado.textContent = '$' + totalPagado.toFixed(2);
-  if (elSaldo) elSaldo.textContent = '$' + saldoPendiente.toFixed(2);
+  const importes = CortesiasUI.calcularImportes(
+    subtotal,
+    totalPagado,
+    validacion,
+  );
+  totalReservacionCalculado = importes.total;
+  const inputSubtotal = document.getElementById('pago_total_manual');
+  if (inputSubtotal) inputSubtotal.value = subtotal.toFixed(2);
+  const mostrar = (id, valor) => {
+    const element = document.getElementById(id);
+    if (element)
+      element.textContent = valor === null ? '—' : '$' + valor.toFixed(2);
+  };
+  mostrar('resumen_descuento_reserva', importes.descuento);
+  mostrar('resumen_total_reserva', importes.total);
+  mostrar('resumen_total_pagado', importes.pagado);
+  mostrar('resumen_saldo_pendiente', importes.saldo);
+  return validacion.valido;
 }
 
 function cambiarMetodoPagoUI() {
@@ -1623,6 +1645,8 @@ function renderTablaPagosReserva() {
 
 // Sobrescribimos limpiamente formularioReservaHtml agregando el Paso 4
 window.formularioReservaHtml = function (titulo) {
+  listaPagosReserva = [];
+  totalReservacionCalculado = null;
   const hoy = fechaLocal();
   setTimeout(() => {
     cargarPreciosHabitacionesPago().then(() => renderTablaPagosReserva());
@@ -1650,7 +1674,7 @@ window.formularioReservaHtml = function (titulo) {
         <div class=form-grid>
           ${campo('Fecha de entrada *', '<input name=fechaInicio type=date required onchange="recalcularSaldosPago()">')}
           ${campo('Fecha de salida *', '<input name=fechaFin type=date required onchange="recalcularSaldosPago()">')}
-          ${campo('Cortesía (%)', '<input name=cortesiaPorcentaje type=number min=0 max=100 step=0.01 value=0 required onchange="recalcularSaldosPago()">')}
+          ${campo('Cortesía (%)', '<input name=cortesiaPorcentaje type=number min=0 max=100 step=0.01 value=0 required aria-describedby="limiteCortesia errorCortesia" oninput="recalcularSaldosPago()" onchange="recalcularSaldosPago()"><small id=errorCortesia role=alert aria-live=polite style="color:#b91c1c" hidden></small>')}
           <p id=limiteCortesia>Consultando límite autorizado…</p>
           ${campo('Adultos *', '<input name=adultos type=number min=1 value=1 required>')}
           ${campo('Menores', '<input name=menores type=number min=0 value=0>')}
@@ -1741,8 +1765,11 @@ window.formularioReservaHtml = function (titulo) {
 
       <div class="cards" style="margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
         <div class="card" style="padding:12px; background:#f8fafc; border-radius:8px; border:1px solid #cbd5e1;">
+          <span>Cortesía aplicada</span><strong id="resumen_descuento_reserva" style="display:block; font-size:1.3rem;">—</strong>
+        </div>
+        <div class="card" style="padding:12px; background:#f8fafc; border-radius:8px; border:1px solid #cbd5e1;">
           <span>Total de reservación</span>
-          <strong id="resumen_total_reserva" style="display:block; font-size:1.3rem; color:#0f172a;">$0.00</strong>
+          <strong id="resumen_total_reserva" style="display:block; font-size:1.3rem; color:#0f172a;">—</strong>
         </div>
         <div class="card" style="padding:12px; background:#f0fdf4; border-radius:8px; border:1px solid #bbf7d0;">
           <span>Total pagado</span>
@@ -1750,14 +1777,14 @@ window.formularioReservaHtml = function (titulo) {
         </div>
         <div class="card" style="padding:12px; background:#fef2f2; border-radius:8px; border:1px solid #fecaca;">
           <span>Saldo pendiente</span>
-          <strong id="resumen_saldo_pendiente" style="display:block; font-size:1.3rem; color:#991b1b;">$0.00</strong>
+          <strong id="resumen_saldo_pendiente" style="display:block; font-size:1.3rem; color:#991b1b;">—</strong>
         </div>
       </div>
     </section>
 
     <div class=reservation-submit>
       <span class=confirmation-note>✓ Se guardará como <strong>Confirmada</strong></span>
-      <button class="primary create-button" onclick="guardarReserva()"><i class="fa-solid fa-floppy-disk"></i> Crear reservación</button>
+      <button class="primary create-button" data-guardar-reserva disabled onclick="guardarReserva()"><i class="fa-solid fa-floppy-disk"></i> Crear reservación</button>
       <button class="primary danger" type="button" onclick="limpiarReservaActual()"><i class="fa-solid fa-broom"></i> Limpiar</button>
     </div>
   </div>`;
@@ -1766,6 +1793,10 @@ window.formularioReservaHtml = function (titulo) {
 // Sobrescribimos guardarReserva para exigir al menos un pago y enviarlo al backend
 window.guardarReserva = async function () {
   const f = reservaForm;
+  if (!recalcularSaldosPago()) {
+    f.cortesiaPorcentaje.reportValidity();
+    return;
+  }
   if (!f.reportValidity()) return;
   const ids = [
     ...document.querySelectorAll('input[name=habitacionIds]:checked'),
@@ -1917,13 +1948,22 @@ const observarCortesia = new MutationObserver(async () => {
   const input = document.querySelector('[name=cortesiaPorcentaje]');
   if (!input || input.dataset.limiteConsultado) return;
   input.dataset.limiteConsultado = 'true';
+  recalcularSaldosPago();
   try {
     const config = await api('/configuracion/cortesias');
     if (!input.isConnected) return;
     input.max = config.maximoPorcentaje;
-    document.getElementById('limiteCortesia').textContent = `Máximo autorizado: ${config.maximoPorcentaje}%`;
+    input.dataset.maximoAutorizado = String(config.maximoPorcentaje);
+    document.getElementById('limiteCortesia').textContent =
+      `Máximo autorizado: ${config.maximoPorcentaje}%`;
   } catch (error) {
-    if (input.isConnected) document.getElementById('limiteCortesia').textContent = error.message;
+    if (input.isConnected) {
+      input.dataset.errorLimite =
+        'No se pudo consultar el máximo autorizado. Vuelve a abrir el formulario.';
+      document.getElementById('limiteCortesia').textContent = error.message;
+    }
+  } finally {
+    if (input.isConnected) recalcularSaldosPago();
   }
 });
 observarCortesia.observe(content, { childList: true, subtree: true });

@@ -89,6 +89,7 @@ describe('Validación estricta de porcentajes', () => {
   it.each([
     -1,
     100.01,
+    44444444,
     1.001,
     NaN,
     Infinity,
