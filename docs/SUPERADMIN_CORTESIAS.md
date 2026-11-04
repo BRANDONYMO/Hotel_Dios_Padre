@@ -79,22 +79,22 @@ DB_HOST=127.0.0.1 DB_PORT=3307 DB_USERNAME=root node test/cortesias.integration.
 ```
 
 La integración necesita un servidor de pruebas MySQL/MariaDB con permiso de crear
-bases. Crea una BD aleatoria `hotel_cortesias_test_*`, importa el dump versionado,
+bases. Crea una BD aleatoria `hotel_cortesias_test_*`, crea únicamente el esquema del dump versionado y datos sintéticos,
 aplica la migración y la elimina al finalizar. Nunca utiliza `DB_NAME`. Inicia Nest
 en el puerto `TEST_APP_PORT` (3099 por defecto). No dirigirla a producción.
 Prueba HTTP/JWT real, revocación, asignación de roles, entradas inválidas, límite
 inclusive, creación/edición, compatibilidad sin campo, totales, pagos y reportes.
 
-Validado localmente con Node 24 y MariaDB 11.8.6: build, 56 pruebas unitarias y
-57 comprobaciones de integración. El test preexistente de disponibilidad tenía
+Validado localmente con Node 24 y MariaDB 11.8.6: build, 56 pruebas unitarias,
+2 pruebas e2e y 159 comprobaciones de integración con Chromium. El test preexistente de disponibilidad tenía
 una petición sin pagos y fallaba antes de evaluar disponibilidad; se completó su
 fixture con un pago válido sin retirar la aserción de disponibilidad.
 
 No se dispone de la BD de producción ni se ejecuta esta migración en Railway.
 Pendiente validar en una copia MySQL de producción, sus diferencias de esquema,
-volumen, SQL modes y cuentas reales. No se ha realizado validación visual manual
-en navegador. La prueba e2e de plantilla (`test/app.e2e-spec.ts`) no forma parte de
-esta validación: espera un texto raíz aunque la aplicación sirve archivos estáticos.
+volumen, SQL modes y cuentas reales. La validación visual en Chromium y sus capturas se documentan en
+`docs/VALIDACION_FUNCIONAL_SUPERADMIN.md`. La suite e2e antigua se actualizó para
+probar el formulario real y su arranque con NestFactory.
 
 ## Archivos de esta implementación
 

@@ -14,8 +14,9 @@ Conserva la regla existente de pago obligatorio. Un límite menor no recalcula r
 
 - `npm run build`
 - `npm test -- --runInBand`: 56 pruebas aprobadas.
-- `DB_PORT=3307 node test/cortesias.integration.cjs`: 57 comprobaciones aprobadas con MariaDB 11.8.6 local, incluyendo migración repetida y peticiones HTTP/JWT reales.
+- `BROWSER_TEST=1 DB_PORT=3307 node test/cortesias.integration.cjs`: 159 comprobaciones aprobadas con MariaDB 11.8.6 local, incluyendo migración repetida, peticiones HTTP/JWT reales y Chromium (`BROWSER_TEST=1`).
+- Suite e2e: 2 pruebas aprobadas usando una BD sintética local.
 - `node --check public/admin.js` y `node --check public/app.js`
 - ESLint dirigido: sin errores ni advertencias en los archivos de permisos, autenticación, configuración y usuarios.
 
-Sin acceso a producción: pendiente ensayo contra una copia MySQL real y revisión visual en navegador. Sin merge ni despliegue en Railway.
+Se corrigió el selector de login que impedía el acceso web del Superadministrador. Capturas e informe en `docs/VALIDACION_FUNCIONAL_SUPERADMIN.md`. Sin acceso a producción: pendiente ensayo contra una copia MySQL real. Sin merge ni despliegue en Railway.

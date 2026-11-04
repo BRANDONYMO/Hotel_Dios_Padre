@@ -1711,8 +1711,8 @@ window.formularioReservaHtml = function (titulo) {
         </label>
 
         <label class="form-field">
-          <span>Total de reservación ($)</span>
-          <input id="pago_total_manual" type="number" min="0" step="0.01" placeholder="Se calcula al elegir hab." oninput="recalcularSaldosPago()">
+          <span>Subtotal antes de cortesía ($)</span>
+          <input id="pago_total_manual" readonly type="number" min="0" step="0.01" placeholder="Se calcula al elegir hab." oninput="recalcularSaldosPago()">
         </label>
       </div>
 

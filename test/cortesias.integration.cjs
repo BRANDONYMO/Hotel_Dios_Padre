@@ -3,20 +3,24 @@
  * npm run build && DB_HOST=127.0.0.1 DB_PORT=3307 DB_USERNAME=root node test/cortesias.integration.cjs
  */
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { randomBytes } = require('node:crypto');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { syntheticSchema } = require('./helpers/cortesias-fixture.cjs');
 
 (async () => {
   const name = 'hotel_cortesias_test_' + randomBytes(6).toString('hex');
   const port = Number(process.env.TEST_APP_PORT || 3099);
   const secret = randomBytes(32).toString('hex');
+  const host = process.env.DB_HOST || '127.0.0.1';
+  if (!['127.0.0.1', 'localhost'].includes(host))
+    throw Error('Esta prueba solo admite una BD local');
   const db = await mysql.createConnection({
-    host: process.env.DB_HOST || '127.0.0.1',
+    host,
     port: Number(process.env.DB_PORT || 3307),
     user: process.env.DB_USERNAME || 'root',
     password: process.env.DB_PASSWORD || '',
@@ -24,6 +28,7 @@ const jwt = require('jsonwebtoken');
   });
   let child;
   let created = false;
+  let retained = false;
   let logs = '';
   let checks = 0;
   async function api(path, token, method = 'GET', body, status = 200) {
@@ -48,9 +53,7 @@ const jwt = require('jsonwebtoken');
     await db.query(`CREATE DATABASE \`${name}\``);
     created = true;
     await db.query(`USE \`${name}\``);
-    await db.query(
-      readFileSync('sql-v2-sept-dic/hotel_dios_padre.sql', 'utf8'),
-    );
+    await syntheticSchema(db);
     const [before] = await db.query(
       'SELECT id, folio FROM reservaciones ORDER BY id',
     );
@@ -318,6 +321,126 @@ const jwt = require('jsonwebtoken');
       '/reportes/ingresos-por-dia?inicio=2099-11-01&fin=2099-11-03',
       superadmin,
     );
+    const matrix = [];
+    let browserCount = 0;
+    for (const [index, porcentaje] of [0, 10, 30, 50, 100].entries()) {
+      await api('/configuracion/cortesias', superadmin, 'PATCH', {
+        maximoPorcentaje: porcentaje,
+      });
+      await api(
+        '/configuracion/cortesias',
+        admin,
+        'PATCH',
+        { maximoPorcentaje: porcentaje },
+        403,
+      );
+      const day = 1 + index * 4;
+      const inicio = `2099-12-${String(day).padStart(2, '0')}`;
+      const fin = `2099-12-${String(day + 2).padStart(2, '0')}`;
+      const input = {
+        ...payload,
+        fechaInicio: inicio,
+        fechaFin: fin,
+        cortesiaPorcentaje: porcentaje,
+      };
+      const createdReservation = await api(
+        '/reservaciones',
+        admin,
+        'POST',
+        input,
+        201,
+      );
+      const row = (await api('/reservaciones', admin)).find(
+        (r) => r.id === createdReservation.id,
+      );
+      const neto = 2000 * (1 - porcentaje / 100);
+      assert.equal(row.total_reservacion, neto);
+      assert.equal(row.total_pagado, 100);
+      assert.equal(row.saldo_pendiente, Math.max(0, neto - 100));
+      const tipos = await api(
+        `/reportes/tipos-habitacion?inicio=${inicio}&fin=${fin}`,
+        superadmin,
+      );
+      assert.equal(
+        tipos.reduce((total, r) => total + Number(r.ganancias), 0),
+        neto,
+      );
+      const dias = await api(
+        `/reportes/ingresos-por-dia?inicio=${inicio}&fin=${fin}`,
+        superadmin,
+      );
+      assert.equal(
+        dias.reduce((total, r) => total + Number(r.ganancias), 0),
+        neto,
+      );
+      checks += 5;
+      await api(
+        `/reservaciones/${createdReservation.id}`,
+        admin,
+        'PATCH',
+        { ...input, cortesiaPorcentaje: porcentaje + 0.01 },
+        400,
+      );
+      if (porcentaje === 100) {
+        await api(
+          '/reservaciones',
+          admin,
+          'POST',
+          { ...input, pagos: [] },
+          400,
+        );
+        const { pagos, ...sinPagos } = input;
+        await api('/reservaciones', admin, 'POST', sinPagos, 400);
+        for (const importe of [0, -1]) {
+          await api(
+            '/reservaciones',
+            admin,
+            'POST',
+            { ...input, pagos: [{ ...input.pagos[0], importe }] },
+            400,
+          );
+        }
+      }
+      matrix.push({
+        porcentaje,
+        bruto: 2000,
+        neto,
+        pagado: 100,
+        saldo: row.saldo_pendiente,
+        reportes: neto,
+        resultado: 'APROBADO',
+      });
+    }
+    for (const value of [-1, 101, null, '', '30', true, {}, [], 0.001]) {
+      await api(
+        '/configuracion/cortesias',
+        superadmin,
+        'PATCH',
+        { maximoPorcentaje: value },
+        400,
+      );
+      await api(
+        `/reservaciones/${reservation.id}`,
+        admin,
+        'PATCH',
+        { ...payload, cortesiaPorcentaje: value },
+        400,
+      );
+    }
+    if (process.env.BROWSER_TEST === '1') {
+      await db.execute(
+        "INSERT INTO habitaciones (numero, piso, tipo_id, estado_id, activa) SELECT 'TEST-UI', 1, ?, id, 1 FROM estados_habitacion WHERE nombre='Disponible' LIMIT 1",
+        [type.insertId],
+      );
+      const { browserChecks } = require('./helpers/cortesias-browser.cjs');
+      browserCount = await browserChecks({
+        baseURL: `http://127.0.0.1:${port}`,
+        password,
+        matrix,
+      });
+      checks += browserCount;
+    }
+    console.log('Matriz funcional: ' + JSON.stringify(matrix));
     await db.execute('UPDATE usuarios SET rol_id=? WHERE id=?', [
       roleId.Administrador,
       accounts.super.id,
@@ -333,6 +456,59 @@ const jwt = require('jsonwebtoken');
       accounts.admin.id,
     ]);
     await api('/configuracion/cortesias', admin, 'GET', undefined, 401);
+    const [version] = await db.query('SELECT VERSION() version');
+    if (process.env.RESULTS_FILE)
+      writeFileSync(
+        process.env.RESULTS_FILE,
+        JSON.stringify(
+          {
+            resultado: 'APROBADO',
+            node: process.version,
+            database: version[0].version,
+            chromium: process.env.BROWSER_TEST === '1',
+            comprobaciones: checks,
+            navegador: browserCount,
+            datos: 'Solo sintéticos; esquema sin filas del dump',
+            matriz: matrix,
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+    if (process.env.KEEP_TEST_DB === '1') {
+      // Restaurar los usuarios tras las pruebas de revocación para la sesión manual.
+      await db.execute('UPDATE usuarios SET rol_id=?, activo=1 WHERE id=?', [
+        roleId.Superadministrador,
+        accounts.super.id,
+      ]);
+      await db.execute('UPDATE usuarios SET activo=1 WHERE id=?', [
+        accounts.admin.id,
+      ]);
+      await db.execute(
+        'UPDATE configuracion_cortesias SET maximo_porcentaje=30 WHERE id=1',
+      );
+      const stateFile = process.env.TEST_STATE_FILE || `/tmp/${name}.json`;
+      writeFileSync(
+        stateFile,
+        JSON.stringify({
+          host,
+          port: Number(process.env.DB_PORT || 3307),
+          user: process.env.DB_USERNAME || 'root',
+          dbPassword: process.env.DB_PASSWORD || '',
+          database: name,
+          appPort: port,
+          secret,
+          testPassword: password,
+          users: ['test_admin', 'test_super'],
+        }),
+        { mode: 0o600, flag: 'wx' },
+      );
+      retained = true;
+      console.log(
+        'Fixture manual conservado. Archivo privado (no compartir): ' +
+          stateFile,
+      );
+    }
     console.log(
       `OK: ${checks} comprobaciones de migración, HTTP/JWT, permisos, límites, reservaciones, pagos y reportes.`,
     );
@@ -341,7 +517,8 @@ const jwt = require('jsonwebtoken');
       child.kill('SIGTERM');
       await once(child, 'exit');
     }
-    if (created) await db.query(`DROP DATABASE IF EXISTS \`${name}\``);
+    if (created && !retained)
+      await db.query(`DROP DATABASE IF EXISTS \`${name}\``);
     await db.end();
   }
 })().catch((error) => {
