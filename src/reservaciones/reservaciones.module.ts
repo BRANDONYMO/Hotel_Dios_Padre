@@ -1,3 +1,4 @@
+import { CortesiasController } from './cortesias.controller';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Huesped } from '../huespedes/huesped.entity';
@@ -21,6 +22,6 @@ import { ReservacionesService } from './reservaciones.service';
     ]),
   ],
   providers: [ReservacionesService],
-  controllers: [ReservacionesController],
+  controllers: [ReservacionesController, CortesiasController],
 })
 export class ReservacionesModule {}

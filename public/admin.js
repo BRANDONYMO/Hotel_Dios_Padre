@@ -1,6 +1,6 @@
 const token = localStorage.getItem('token'),
   user = JSON.parse(localStorage.getItem('usuario') || 'null');
-if (!token || user?.rol !== 'Administrador') location.href = '/';
+if (!token || !['Administrador', 'Superadministrador'].includes(user?.rol)) location.href = '/';
 const api = async (url, opt = {}) => {
   const isForm = opt.body instanceof FormData;
   const headers = { Authorization: 'Bearer ' + token, ...opt.headers };
@@ -48,6 +48,7 @@ const modules = [
   ],
   ['Reportes', 'reportes', '<i class="fa-solid fa-chart-line"></i>'],
 ];
+if (user?.rol === 'Superadministrador') modules.push(['Cortesías', 'cortesias', '<i class="fa-solid fa-percent"></i>']);
 // Inyectamos el icono junto al nombre (x[2] es el icono y x[0] el texto)
 nav.innerHTML = modules
   .map(
@@ -87,6 +88,7 @@ async function load(id, label) {
     if (id === 'recepcion') return await recepcion();
     if (id === 'limpieza') return await limpieza();
     if (id === 'usuarios') return await usuarios();
+    if (id === 'cortesias') return await cortesias();
     if (id === 'reportes') return await reportes();
     return await crud(id);
   } catch (e) {
@@ -437,6 +439,7 @@ async function editarReserva(r) {
   f.huespedId.value = r.huesped_id;
   f.fechaInicio.value = String(r.fecha_inicio).slice(0, 10);
   f.fechaFin.value = String(r.fecha_fin).slice(0, 10);
+  if (f.cortesiaPorcentaje) f.cortesiaPorcentaje.value = Number(r.cortesia_porcentaje || 0);
   f.adultos.value = r.adultos;
   f.menores.value = r.menores;
   await buscarDisponibles();
@@ -621,6 +624,7 @@ async function editarReserva(r) {
   ].forEach((campo) => (f[campo].value = huesped[campo] || ''));
   f.fechaInicio.value = String(r.fecha_inicio).slice(0, 10);
   f.fechaFin.value = String(r.fecha_fin).slice(0, 10);
+  if (f.cortesiaPorcentaje) f.cortesiaPorcentaje.value = Number(r.cortesia_porcentaje || 0);
   f.adultos.value = r.adultos;
   f.menores.value = r.menores;
   await buscarDisponibles();
@@ -879,6 +883,7 @@ async function editarReserva(r) {
   ].forEach((campo) => (f[campo].value = huesped[campo] || ''));
   f.fechaInicio.value = String(r.fecha_inicio).slice(0, 10);
   f.fechaFin.value = String(r.fecha_fin).slice(0, 10);
+  if (f.cortesiaPorcentaje) f.cortesiaPorcentaje.value = Number(r.cortesia_porcentaje || 0);
   f.adultos.value = r.adultos;
   f.menores.value = r.menores;
   await buscarDisponibles();
@@ -1150,6 +1155,7 @@ async function usuarios() {
             <option value="">Selecciona un rol</option>
 
             ${roles
+              .filter((r) => r.nombre !== 'Superadministrador' || user?.rol === 'Superadministrador')
               .map((r) => `<option value="${r.id}">${esc(r.nombre)}</option>`)
               .join('')}
           </select>
@@ -1495,6 +1501,9 @@ function recalcularSaldosPago() {
     totalReservacionCalculado = 0;
   }
 
+  const cortesia = Number(document.querySelector('[name=cortesiaPorcentaje]')?.value || 0);
+  totalReservacionCalculado = Math.round(totalReservacionCalculado * (1 - cortesia / 100) * 100) / 100;
+
   const totalPagado = listaPagosReserva.reduce(
     (acc, p) => acc + Number(p.importe || 0),
     0,
@@ -1641,6 +1650,8 @@ window.formularioReservaHtml = function (titulo) {
         <div class=form-grid>
           ${campo('Fecha de entrada *', '<input name=fechaInicio type=date required onchange="recalcularSaldosPago()">')}
           ${campo('Fecha de salida *', '<input name=fechaFin type=date required onchange="recalcularSaldosPago()">')}
+          ${campo('Cortesía (%)', '<input name=cortesiaPorcentaje type=number min=0 max=100 step=0.01 value=0 required onchange="recalcularSaldosPago()">')}
+          <p id=limiteCortesia>Consultando límite autorizado…</p>
           ${campo('Adultos *', '<input name=adultos type=number min=1 value=1 required>')}
           ${campo('Menores', '<input name=menores type=number min=0 value=0>')}
         </div>
@@ -1657,7 +1668,7 @@ window.formularioReservaHtml = function (titulo) {
     </section>
 
     <section class=room-selection style="margin-top:24px; border-top:1px solid #e2e8f0; padding-top:20px;">
-      <h3>4. Formas de pago (Obligatorio)</h3>
+      <h3>4. Formas de pago (Obligatorio)</h3><p>La cortesía reduce el total de la estancia; no es un pago. Los pagos registrados se conservan.</p>
       <p class=helper style="background:#fff3cd; color:#664d03; padding:10px 12px; border-radius:6px; border:1px solid #ffecb5;">
         <i class="fa-solid fa-shield-halved"></i> <strong>Seguridad:</strong> No ingreses ni almacenes números completos de tarjeta ni CVV. Registra únicamente los últimos 4 dígitos.
       </p>
@@ -1792,14 +1803,19 @@ window.guardarReserva = async function () {
     totalReservacion: totalReservacionCalculado,
     totalPagado: totalPagado,
     saldoPendiente: saldoPendiente,
+    cortesiaPorcentaje: Number(f.cortesiaPorcentaje.value),
     pagos: listaPagosReserva.map(({ idTemp, ...resto }) => resto),
   };
 
   const id = f.id.value;
-  await api(id ? `/reservaciones/${id}` : '/reservaciones', {
-    method: id ? 'PATCH' : 'POST',
-    body: JSON.stringify(d),
-  });
+  try {
+    await api(id ? `/reservaciones/${id}` : '/reservaciones', {
+      method: id ? 'PATCH' : 'POST',
+      body: JSON.stringify(d),
+    });
+  } catch (error) {
+    return alert(error.message);
+  }
   alert(id ? 'Reservación actualizada' : 'Reservación creada correctamente');
   listaPagosReserva = [];
   origenReserva === 'recepcion' ? recepcion() : reservaciones();
@@ -1827,6 +1843,7 @@ window.reservaCard = function (r) {
     <p>${esc(String(r.fecha_inicio).slice(0, 10))} → ${esc(String(r.fecha_fin).slice(0, 10))}</p>
     <div class=selected-rooms>${detalleHabitaciones(r.habitaciones_detalle)}</div>
     <div style="margin:8px 0; padding:8px; background:#f8fafc; border-radius:6px; border:1px solid #e2e8f0; font-size:0.85rem;">
+      <div>Cortesía aplicada: <strong>${Number(r.cortesia_porcentaje || 0).toFixed(2)}%</strong></div>
       <div>Total reservación: <strong>$${totalRes.toFixed(2)}</strong></div>
       <div style="color:#166534;">Total pagado: <strong>$${totalPag.toFixed(2)}</strong></div>
       <div style="color:${saldoPend > 0 ? '#991b1b' : '#166534'};">Saldo pendiente: <strong>$${saldoPend.toFixed(2)}</strong></div>
@@ -1863,6 +1880,7 @@ window.editarReserva = async function (r) {
   ].forEach((campo) => (f[campo].value = huesped[campo] || ''));
   f.fechaInicio.value = String(r.fecha_inicio).slice(0, 10);
   f.fechaFin.value = String(r.fecha_fin).slice(0, 10);
+  if (f.cortesiaPorcentaje) f.cortesiaPorcentaje.value = Number(r.cortesia_porcentaje || 0);
   f.adultos.value = r.adultos;
   f.menores.value = r.menores;
   await buscarDisponibles();
@@ -1879,3 +1897,33 @@ window.editarReserva = async function (r) {
   renderTablaPagosReserva();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
+
+async function cortesias() {
+  try {
+    const config = await api('/configuracion/cortesias');
+    content.innerHTML = `<div class="box"><h2>Límite de cortesías</h2><p>Porcentaje máximo para nuevas cortesías y modificaciones de reservaciones. No cambia reservaciones guardadas.</p><form id="cortesiasForm"><label>Máximo autorizado (%) <input name="maximo" type="number" min="0" max="100" step="0.01" required value="${config.maximoPorcentaje}"></label><button class="primary">Guardar límite</button></form></div>`;
+    document.getElementById('cortesiasForm').onsubmit = async (event) => {
+      event.preventDefault();
+      try {
+        await api('/configuracion/cortesias', { method: 'PATCH', body: JSON.stringify({ maximoPorcentaje: Number(event.target.maximo.value) }) });
+        alert('Límite actualizado');
+      } catch (error) { alert(error.message); }
+    };
+  } catch (error) { content.textContent = error.message; }
+}
+
+// El formulario se reutiliza en Reservaciones y Recepción.
+const observarCortesia = new MutationObserver(async () => {
+  const input = document.querySelector('[name=cortesiaPorcentaje]');
+  if (!input || input.dataset.limiteConsultado) return;
+  input.dataset.limiteConsultado = 'true';
+  try {
+    const config = await api('/configuracion/cortesias');
+    if (!input.isConnected) return;
+    input.max = config.maximoPorcentaje;
+    document.getElementById('limiteCortesia').textContent = `Máximo autorizado: ${config.maximoPorcentaje}%`;
+  } catch (error) {
+    if (input.isConnected) document.getElementById('limiteCortesia').textContent = error.message;
+  }
+});
+observarCortesia.observe(content, { childList: true, subtree: true });

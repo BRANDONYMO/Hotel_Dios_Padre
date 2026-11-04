@@ -58,11 +58,7 @@ describe('ReservacionesService disponibilidad al editar', () => {
       {} as any,
     );
 
-    const resultado = await service.disponibles(
-      '2099-07-20',
-      '2099-07-22',
-      42,
-    );
+    const resultado = await service.disponibles('2099-07-20', '2099-07-22', 42);
 
     expect(enlaces.findBy).toHaveBeenCalledWith({ reservacionId: 42 });
     expect(queryBuilder.andWhere).toHaveBeenCalledWith(
@@ -88,9 +84,7 @@ describe('ReservacionesService disponibilidad al editar', () => {
       }),
     } as any;
     const enlaces = {
-      findBy: jest.fn().mockResolvedValue([
-        { habitacionId: 7, precio: 900 },
-      ]),
+      findBy: jest.fn().mockResolvedValue([{ habitacionId: 7, precio: 900 }]),
     } as any;
     const service = new ReservacionesService(
       reservaciones,
@@ -108,6 +102,15 @@ describe('ReservacionesService disponibilidad al editar', () => {
           fechaInicio: '2099-07-20',
           fechaFin: '2099-07-22',
           habitacionIds: [7],
+          pagos: [
+            {
+              metodo_pago: 'transferencia',
+              importe: 100,
+              banco: 'Prueba',
+              fecha_pago: '2099-07-20',
+              referencia: 'TEST',
+            },
+          ],
         },
         1,
       ),
