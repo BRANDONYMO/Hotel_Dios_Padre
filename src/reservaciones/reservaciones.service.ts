@@ -4,6 +4,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import { validarCortesia } from './cortesias';
 import { DataSource, In, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Reservacion } from './entities/reservacion.entity';
@@ -57,7 +58,7 @@ export class ReservacionesService implements OnModuleInit {
         'h.apellido_paterno AS huesped_apellido',
         'u.nombre AS recepcionista_nombre',
         "GROUP_CONCAT(CONCAT(ha.numero, IF(ha.foto_url IS NULL, '', CONCAT('|',ha.foto_url)))) AS habitaciones_detalle",
-        ' COALESCE(SUM(rh.precio), 0) * GREATEST(DATEDIFF(r.fecha_fin, r.fecha_inicio), 1) AS total_reservacion',
+        ' ROUND(COALESCE(SUM(rh.precio), 0) * GREATEST(DATEDIFF(r.fecha_fin, r.fecha_inicio), 1) * (1 - r.cortesia_porcentaje / 100), 2) AS total_reservacion',
         '(SELECT COALESCE(SUM(p.importe), 0) FROM pagos p WHERE p.reservacion_id = r.id) AS total_pagado',
       ])
       .groupBy('r.id')
@@ -205,6 +206,10 @@ export class ReservacionesService implements OnModuleInit {
     );
 
     return this.dataSource.transaction(async (manager) => {
+      const cortesiaPorcentaje = await validarCortesia(
+        manager,
+        data.cortesiaPorcentaje === undefined ? 0 : data.cortesiaPorcentaje,
+      );
       let huespedId = Number(data.huespedId);
       if (!huespedId && data.huesped) {
         const huesped = await manager.save(
@@ -225,6 +230,7 @@ export class ReservacionesService implements OnModuleInit {
           usuarioId,
           fechaInicio: data.fechaInicio,
           fechaFin: data.fechaFin,
+          cortesiaPorcentaje,
           adultos: Number(data.adultos || 1),
           menores: Number(data.menores || 0),
           estado: 'Confirmada',
@@ -297,9 +303,7 @@ export class ReservacionesService implements OnModuleInit {
       data.fechaFin,
       id,
     );
-    const permitidas = new Set(
-      disponibles.map((habitacion) => habitacion.id),
-    );
+    const permitidas = new Set(disponibles.map((habitacion) => habitacion.id));
     if (
       nuevosIds.some((habitacionId: number) => !permitidas.has(habitacionId))
     ) {
@@ -317,6 +321,12 @@ export class ReservacionesService implements OnModuleInit {
     );
 
     return this.dataSource.transaction(async (manager) => {
+      const cortesiaPorcentaje = await validarCortesia(
+        manager,
+        data.cortesiaPorcentaje === undefined
+          ? Number(actual.cortesiaPorcentaje ?? 0)
+          : data.cortesiaPorcentaje,
+      );
       let huespedId = Number(data.huespedId || actual.huespedId);
       if (data.huesped) {
         if (huespedId) {
@@ -339,6 +349,7 @@ export class ReservacionesService implements OnModuleInit {
         usuarioId,
         fechaInicio: data.fechaInicio,
         fechaFin: data.fechaFin,
+        cortesiaPorcentaje,
         adultos: Number(data.adultos || 1),
         menores: Number(data.menores || 0),
       });
@@ -535,22 +546,30 @@ export class ReservacionesService implements OnModuleInit {
     return pagos.map((p, idx) => {
       const metodo = String(p.metodo_pago || '').trim();
       if (!metodosValidos.includes(metodo)) {
-        throw new BadRequestException(`Forma de pago inválida en el pago #${idx + 1}`);
+        throw new BadRequestException(
+          `Forma de pago inválida en el pago #${idx + 1}`,
+        );
       }
 
       const importe = Number(p.importe);
-      if (isNaN(importe) || importe <= 0) {
-        throw new BadRequestException(`Importe inválido en el pago #${idx + 1}`);
+      if (!Number.isFinite(importe) || importe <= 0) {
+        throw new BadRequestException(
+          `Importe inválido en el pago #${idx + 1}`,
+        );
       }
 
       const banco = String(p.banco || '').trim();
       if (!banco) {
-        throw new BadRequestException(`El banco es obligatorio en el pago #${idx + 1}`);
+        throw new BadRequestException(
+          `El banco es obligatorio en el pago #${idx + 1}`,
+        );
       }
 
       const fecha = String(p.fecha_pago || '').slice(0, 10);
       if (!fecha) {
-        throw new BadRequestException(`La fecha de pago es obligatoria en el pago #${idx + 1}`);
+        throw new BadRequestException(
+          `La fecha de pago es obligatoria en el pago #${idx + 1}`,
+        );
       }
 
       const esTarjeta =

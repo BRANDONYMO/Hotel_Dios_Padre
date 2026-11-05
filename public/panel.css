@@ -1822,3 +1822,9 @@ button {
 
 /*para que las tablas de agrega habitacion y agregar usuarios se puedan desoalzar porque se quden estaticas en un clelualu y no se ve contenido */
 
+
+/* Guardado bloqueado mientras la cortesía o su límite sean inválidos. */
+button[data-guardar-reserva]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
