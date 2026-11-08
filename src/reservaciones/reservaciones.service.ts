@@ -526,6 +526,7 @@ export class ReservacionesService implements OnModuleInit {
       'Tarjeta de crédito',
       'Transferencia bancaria',
       'Depósito bancario',
+      'Efectivo',
       'debito',
       'credito',
       'transferencia',
