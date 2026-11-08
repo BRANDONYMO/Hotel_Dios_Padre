@@ -1706,6 +1706,7 @@ window.formularioReservaHtml = function (titulo) {
             <option value="Tarjeta de crédito">2. Tarjeta de crédito</option>
             <option value="Transferencia bancaria">3. Transferencia bancaria</option>
             <option value="Depósito bancario">4. Depósito bancario</option>
+            <option value="Efectivo">5. Pago en Efectivo</option>
           </select>
         </label>
 
