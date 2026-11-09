@@ -1547,11 +1547,17 @@ function cambiarMetodoPagoUI() {
   const inputTerm = document.getElementById('pago_terminacion');
   const lblBanco = document.getElementById('lbl_pago_banco');
   const lblRef = document.getElementById('lbl_pago_referencia');
+  const campoBanco = document.getElementById('wrap_banco'); // <-- NUEVO
+  const campoRef = document.getElementById('wrap_referencia'); // <-- NUEVO
 
   const esTarjeta =
     metodo === 'Tarjeta de débito' || metodo === 'Tarjeta de crédito';
   if (campoTerm) campoTerm.style.display = esTarjeta ? '' : 'none';
   if (!esTarjeta && inputTerm) inputTerm.value = '';
+
+  const esEfectivo = metodo === 'Efectivo'; // <-- NUEVO
+  if (campoBanco) campoBanco.style.display = esEfectivo ? 'none' : ''; // <-- NUEVO
+  if (campoRef) campoRef.style.display = esEfectivo ? 'none' : ''; // <-- NUEVO
 
   if (lblBanco) {
     lblBanco.textContent =
@@ -1567,14 +1573,20 @@ function cambiarMetodoPagoUI() {
 function registrarPagoEnLista() {
   const metodo = document.getElementById('pago_metodo')?.value || '';
   const importe = parseFloat(document.getElementById('pago_importe')?.value);
-  const banco = (document.getElementById('pago_banco')?.value || '').trim();
+  let banco = (document.getElementById('pago_banco')?.value || '').trim();
   const fecha = document.getElementById('pago_fecha')?.value || '';
   const terminacion = (
     document.getElementById('pago_terminacion')?.value || ''
   ).trim();
-  const referencia = (
+  let referencia = (
     document.getElementById('pago_referencia')?.value || ''
   ).trim();
+
+  // <-- NUEVO: Si es Efectivo, ponemos valores automáticos para que pase tus validaciones
+  if (metodo === 'Efectivo') {
+    banco = 'Caja';
+    referencia = 'Efectivo';
+  }
 
   if (!metodo) return alert('Selecciona una forma de pago.');
   if (isNaN(importe) || importe <= 0)
@@ -1715,7 +1727,7 @@ window.formularioReservaHtml = function (titulo) {
           <input id="pago_importe" type="number" min="0.01" step="0.01" placeholder="Ej. 1500.00">
         </label>
 
-        <label class="form-field">
+        <label class="form-field" id="wrap_banco">
           <span id="lbl_pago_banco">Banco *</span>
           <input id="pago_banco" type="text" placeholder="Ej. BBVA, Banamex, Santander">
         </label>
@@ -1730,7 +1742,7 @@ window.formularioReservaHtml = function (titulo) {
           <input id="pago_terminacion" type="text" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" placeholder="Ej. 4821" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,4)">
         </label>
 
-        <label class="form-field">
+        <label class="form-field" id="wrap_referencia">
           <span id="lbl_pago_referencia">Número o referencia de operación</span>
           <input id="pago_referencia" type="text" placeholder="Folio / autorización / referencia">
         </label>

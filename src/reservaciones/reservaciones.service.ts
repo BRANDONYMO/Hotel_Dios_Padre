@@ -559,13 +559,14 @@ export class ReservacionesService implements OnModuleInit {
         );
       }
 
-      const banco = String(p.banco || '').trim();
+      let banco = String(p.banco || '').trim();
+      if (metodo === 'Efectivo' && !banco) banco = 'Caja'; // <-- Blindaje anti-crasheo
       if (!banco) {
         throw new BadRequestException(
           `El banco es obligatorio en el pago #${idx + 1}`,
         );
       }
-
+      
       const fecha = String(p.fecha_pago || '').slice(0, 10);
       if (!fecha) {
         throw new BadRequestException(
@@ -586,7 +587,8 @@ export class ReservacionesService implements OnModuleInit {
         );
       }
 
-      const referencia = String(p.referencia || '').trim();
+      let referencia = String(p.referencia || '').trim();
+      if (metodo === 'Efectivo' && !referencia) referencia = 'Efectivo'; // <-- Blindaje anti-crasheo
       if (!esTarjeta && !referencia) {
         throw new BadRequestException(
           `El número o referencia de operación es obligatorio en el pago #${idx + 1}`,
