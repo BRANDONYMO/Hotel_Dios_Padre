@@ -9,6 +9,8 @@ import { AsignacionLimpieza } from '../asignaciones-limpieza/entities/asignacion
 import { Habitacion } from '../habitaciones/entities/habitacion.entity';
 import { EstadoHabitacion } from '../habitaciones/entities/estado-habitacion.entity';
 import { Observacion } from '../observaciones/observacion.entity';
+import { BitacoraService } from '../bitacora/bitacora.service';
+
 @Injectable()
 export class LimpiezaService {
   constructor(
@@ -18,7 +20,9 @@ export class LimpiezaService {
     @InjectRepository(EstadoHabitacion) private e: Repository<EstadoHabitacion>,
     @InjectRepository(Observacion) private o: Repository<Observacion>,
     private ds: DataSource,
+    private readonly bitacoraService: BitacoraService,
   ) {}
+
   list() {
     return this.ds.query(
       `SELECT a.*,h.numero,u.nombre camarista
@@ -30,7 +34,8 @@ export class LimpiezaService {
        ORDER BY a.fecha DESC,a.id DESC`,
     );
   }
-  async asignar(d: any) {
+
+  async asignar(d: any, usuarioId?: number) {
     const hoy = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Mexico_City',
       year: 'numeric',
@@ -49,18 +54,30 @@ export class LimpiezaService {
     if (x) {
       x.camaristaId = d.camaristaId;
       x.estado = 'Pendiente';
-    } else
+    } else {
       x = this.a.create({
         habitacionId: d.habitacionId,
         camaristaId: d.camaristaId,
         fecha: d.fecha,
         estado: 'Pendiente',
       });
+    }
     await this.a.save(x);
     const e = await this.e.findOneBy({ nombre: 'Sucia' });
     if (e) await this.h.update(d.habitacionId, { estadoId: e.id });
+
+    if (usuarioId) {
+      const hab = await this.h.findOneBy({ id: d.habitacionId });
+      await this.bitacoraService.registrarAccion(
+        usuarioId,
+        'Asignación de limpieza',
+        `Se asignó limpieza de la habitación ${hab?.numero || d.habitacionId} para la fecha ${d.fecha}`
+      );
+    }
+
     return x;
   }
+
   async cambiar(id: number, estado: string, userId: number, obs?: string) {
     const a = await this.a.findOneBy({ id });
     if (!a) throw new NotFoundException();
@@ -74,7 +91,7 @@ export class LimpiezaService {
     const estadoHabitacion = estado === 'Limpia' ? 'Disponible' : estado;
     const e = await this.e.findOneBy({ nombre: estadoHabitacion });
     if (e) await this.h.update(a.habitacionId, { estadoId: e.id });
-    if (obs)
+    if (obs) {
       await this.o.save(
         this.o.create({
           habitacionId: a.habitacionId,
@@ -83,8 +100,18 @@ export class LimpiezaService {
           descripcion: obs,
         }),
       );
+    }
+
+    const hab = await this.h.findOneBy({ id: a.habitacionId });
+    await this.bitacoraService.registrarAccion(
+      userId,
+      'Cambio de estado de limpieza',
+      `Se cambió el estado de limpieza de la habitación ${hab?.numero || a.habitacionId} a "${estado}"`
+    );
+
     return a;
   }
+
   observaciones() {
     return this.ds.query(
       `SELECT o.*,h.numero,u.nombre usuario

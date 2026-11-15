@@ -13,6 +13,7 @@ import { Habitacion } from '../habitaciones/entities/habitacion.entity';
 import { EstadoHabitacion } from '../habitaciones/entities/estado-habitacion.entity';
 import { Huesped } from '../huespedes/huesped.entity';
 import { Pago } from './entities/pago.entity';
+import { BitacoraService } from '../bitacora/bitacora.service';
 
 @Injectable()
 export class ReservacionesService implements OnModuleInit {
@@ -26,9 +27,9 @@ export class ReservacionesService implements OnModuleInit {
     @InjectRepository(EstadoHabitacion)
     private readonly estados: Repository<EstadoHabitacion>,
     private readonly dataSource: DataSource,
+    private readonly bitacoraService: BitacoraService,
   ) {}
 
-  // Se asegura de que la tabla pagos exista automáticamente al arrancar NestJS
   async onModuleInit() {
     await this.dataSource.query(`
       CREATE TABLE IF NOT EXISTS pagos (
@@ -270,6 +271,12 @@ export class ReservacionesService implements OnModuleInit {
         });
       }
 
+      await this.bitacoraService.registrarAccion(
+        usuarioId,
+        'Creación de reservación',
+        `Se creó la nueva reservación ${reservacion.folio} para la fecha ${data.fechaInicio}`
+      );
+
       return reservacion;
     });
   }
@@ -405,11 +412,17 @@ export class ReservacionesService implements OnModuleInit {
         });
       }
 
+      await this.bitacoraService.registrarAccion(
+        usuarioId,
+        'Modificación de reservación',
+        `Se modificaron los datos o tarifas de la reservación ${actual.folio || id}`
+      );
+
       return manager.findOneBy(Reservacion, { id });
     });
   }
 
-  async estado(id: number, estado: string) {
+  async estado(id: number, estado: string, usuarioId: number) {
     const permitidos = ['En proceso', 'Confirmada', 'Cancelada'];
     if (!permitidos.includes(estado)) {
       throw new BadRequestException('Estado de reservación inválido');
@@ -418,6 +431,7 @@ export class ReservacionesService implements OnModuleInit {
     const reservacion = await this.reservaciones.findOneBy({ id });
     if (!reservacion) throw new NotFoundException('Reservación no encontrada');
 
+    const estadoAnterior = reservacion.estado;
     reservacion.estado = estado;
     await this.reservaciones.save(reservacion);
 
@@ -436,6 +450,12 @@ export class ReservacionesService implements OnModuleInit {
       );
     }
 
+    await this.bitacoraService.registrarAccion(
+      usuarioId,
+      'Cambio de estado en reservación',
+      `Se cambió la reservación ${reservacion.folio || id} de "${estadoAnterior}" a "${estado}"`
+    );
+
     return reservacion;
   }
 
@@ -452,7 +472,7 @@ export class ReservacionesService implements OnModuleInit {
     return { message: 'Bloqueos vencidos liberados' };
   }
 
-  async eliminar(id: number) {
+  async eliminar(id: number, usuarioId: number) {
     const reservacion = await this.reservaciones.findOneBy({ id });
     if (!reservacion) throw new NotFoundException('Reservación no encontrada');
 
@@ -474,6 +494,12 @@ export class ReservacionesService implements OnModuleInit {
           estadoId: disponible.id,
         });
       }
+
+      await this.bitacoraService.registrarAccion(
+        usuarioId,
+        'Eliminación de reservación',
+        `Se eliminó permanentemente del sistema la reservación ${reservacion.folio || id}`
+      );
 
       return { message: 'Reservación eliminada' };
     });
@@ -560,7 +586,7 @@ export class ReservacionesService implements OnModuleInit {
       }
 
       let banco = String(p.banco || '').trim();
-      if (metodo === 'Efectivo' && !banco) banco = 'Caja'; // <-- Blindaje anti-crasheo
+      if (metodo === 'Efectivo' && !banco) banco = 'Caja';
       if (!banco) {
         throw new BadRequestException(
           `El banco es obligatorio en el pago #${idx + 1}`,
@@ -588,7 +614,7 @@ export class ReservacionesService implements OnModuleInit {
       }
 
       let referencia = String(p.referencia || '').trim();
-      if (metodo === 'Efectivo' && !referencia) referencia = 'Efectivo'; // <-- Blindaje anti-crasheo
+      if (metodo === 'Efectivo' && !referencia) referencia = 'Efectivo';
       if (!esTarjeta && !referencia) {
         throw new BadRequestException(
           `El número o referencia de operación es obligatorio en el pago #${idx + 1}`,

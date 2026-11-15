@@ -68,13 +68,17 @@ export class ReservacionesController {
   estado(
     @Param('id', ParseIntPipe) id: number,
     @Body('estado') estado: string,
+    @UsuarioActual() usuario: any, // <-- Atrapamos al usuario logueado
   ) {
-    return this.service.estado(id, estado);
+    return this.service.estado(id, estado, usuario.id); // <-- Y se lo mandamos al servicio
   }
 
   @Delete(':id')
-  eliminar(@Param('id', ParseIntPipe) id: number) {
-    return this.service.eliminar(id);
+  eliminar(
+    @Param('id', ParseIntPipe) id: number,
+    @UsuarioActual() usuario: any, // <-- Atrapamos quién la elimina
+  ) {
+    return this.service.eliminar(id, usuario.id); // <-- Le mandamos el usuario a la función eliminar
   }
 
   @Post('liberar-expiradas')

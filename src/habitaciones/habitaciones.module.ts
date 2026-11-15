@@ -8,10 +8,12 @@ import { TipoHabitacion } from '../tiposhabitacion/entities/tipo-habitacion.enti
 import { HabitacionesController } from './habitaciones.controller';
 import { HabitacionesService } from './habitaciones.service';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { BitacoraModule } from '../bitacora/bitacora.module'; // <-- IMPORTACIÓN NUEVA
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Habitacion, EstadoHabitacion, TipoHabitacion]),
+    BitacoraModule, // <-- MÓDULO AGREGADO AQUÍ
   ],
   controllers: [HabitacionesController],
   providers: [HabitacionesService, RolesGuard],

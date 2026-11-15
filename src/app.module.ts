@@ -12,6 +12,7 @@ import { ReservacionesModule } from './reservaciones/reservaciones.module';
 import { RecepcionModule } from './recepcion/recepcion.module';
 import { LimpiezaModule } from './limpieza/limpieza.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { BitacoraModule } from './bitacora/bitacora.module'; // <-- IMPORTACIÓN CAMBIADA
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -45,6 +46,7 @@ import { ReportesModule } from './reportes/reportes.module';
     RecepcionModule,
     LimpiezaModule,
     ReportesModule,
+    BitacoraModule, // <-- MÓDULO AGREGADO
   ],
 })
 export class AppModule {}

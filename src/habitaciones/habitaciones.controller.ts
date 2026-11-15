@@ -68,8 +68,11 @@ export class HabitacionesController {
 
   @Post()
   @Roles('Administrador')
-  create(@Body() data: CreateHabitacionDto) {
-    return this.service.create(data);
+  create(
+    @Body() data: CreateHabitacionDto,
+    @UsuarioActual() usuario: { id: number },
+  ) {
+    return this.service.create(data, usuario.id);
   }
 
   @Patch(':id')
@@ -77,8 +80,9 @@ export class HabitacionesController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateHabitacionDto,
+    @UsuarioActual() usuario: { id: number },
   ) {
-    return this.service.update(id, data);
+    return this.service.update(id, data, usuario.id);
   }
 
   @Post(':id/foto')
@@ -95,6 +99,7 @@ export class HabitacionesController {
   )
   subirFoto(
     @Param('id', ParseIntPipe) id: number,
+    @UsuarioActual() usuario: { id: number },
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) {
@@ -105,13 +110,17 @@ export class HabitacionesController {
     return this.service.guardarFoto(
       id,
       `/uploads/habitaciones/${file.filename}`,
+      usuario.id,
     );
   }
 
   @Delete(':id/foto')
   @Roles('Administrador')
-  eliminarFoto(@Param('id', ParseIntPipe) id: number) {
-    return this.service.eliminarFoto(id);
+  eliminarFoto(
+    @Param('id', ParseIntPipe) id: number,
+    @UsuarioActual() usuario: { id: number },
+  ) {
+    return this.service.eliminarFoto(id, usuario.id);
   }
 
   @Patch(':id/estado')
@@ -119,19 +128,26 @@ export class HabitacionesController {
   estado(
     @Param('id', ParseIntPipe) id: number,
     @Body() data: CambiarEstadoHabitacionDto,
+    @UsuarioActual() usuario: { id: number },
   ) {
-    return this.service.estado(id, data.estadoId);
+    return this.service.estado(id, data.estadoId, usuario.id);
   }
 
   @Delete(':id')
   @Roles('Administrador')
-  eliminar(@Param('id', ParseIntPipe) id: number) {
-    return this.service.eliminar(id);
+  eliminar(
+    @Param('id', ParseIntPipe) id: number,
+    @UsuarioActual() usuario: { id: number },
+  ) {
+    return this.service.eliminar(id, usuario.id);
   }
 
   @Patch(':id/restaurar')
   @Roles('Administrador')
-  restaurar(@Param('id', ParseIntPipe) id: number) {
-    return this.service.restaurar(id);
+  restaurar(
+    @Param('id', ParseIntPipe) id: number,
+    @UsuarioActual() usuario: { id: number },
+  ) {
+    return this.service.restaurar(id, usuario.id);
   }
 }

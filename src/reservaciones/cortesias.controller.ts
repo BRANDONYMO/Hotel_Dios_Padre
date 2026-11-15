@@ -11,12 +11,17 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { porcentajeValido } from './cortesias';
+import { UsuarioActual } from '../common/decorators/usuario-actual.decorator';
+import { BitacoraService } from '../bitacora/bitacora.service';
 
 @Controller('configuracion/cortesias')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('Administrador')
 export class CortesiasController {
-  constructor(private readonly db: DataSource) {}
+  constructor(
+    private readonly db: DataSource,
+    private readonly bitacoraService: BitacoraService,
+  ) {}
 
   @Get()
   async obtener() {
@@ -32,7 +37,10 @@ export class CortesiasController {
 
   @Patch()
   @Roles('Superadministrador')
-  async actualizar(@Body() body: { maximoPorcentaje: number }) {
+  async actualizar(
+    @Body() body: { maximoPorcentaje: number },
+    @UsuarioActual() usuario: { id: number }
+  ) {
     const maximo = porcentajeValido(body?.maximoPorcentaje);
     const result = await this.db.query<{ affectedRows: number }>(
       'UPDATE configuracion_cortesias SET maximo_porcentaje = ? WHERE id = 1',
@@ -42,6 +50,16 @@ export class CortesiasController {
       throw new ServiceUnavailableException(
         'Falta configurar el límite de cortesías',
       );
+      
+    // Registro en la bitácora
+    if (usuario && usuario.id) {
+      await this.bitacoraService.registrarAccion(
+        usuario.id,
+        'Modificación límite de cortesías',
+        `Se actualizó el límite máximo autorizado de cortesías al ${maximo}%`
+      );
+    }
+
     return { maximoPorcentaje: maximo };
   }
 }

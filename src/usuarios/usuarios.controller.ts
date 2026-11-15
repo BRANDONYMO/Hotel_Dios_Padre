@@ -36,33 +36,33 @@ export class UsuariosController {
   @Post()
   create(
     @Body() dto: CreateUsuarioDto,
-    @UsuarioActual() actor: { rol: string },
+    @UsuarioActual() actor: { id: number; rol: string }, // <-- Se agregó el id
   ) {
-    return this.service.create(dto, actor.rol);
+    return this.service.create(dto, actor.rol, actor.id); // <-- Se manda el id
   }
 
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateUsuarioDto,
-    @UsuarioActual() actor: { rol: string },
+    @UsuarioActual() actor: { id: number; rol: string },
   ) {
-    return this.service.update(id, dto, actor.rol);
+    return this.service.update(id, dto, actor.rol, actor.id);
   }
 
   @Patch(':id/estado')
   toggle(
     @Param('id', ParseIntPipe) id: number,
-    @UsuarioActual() actor: { rol: string },
+    @UsuarioActual() actor: { id: number; rol: string },
   ) {
-    return this.service.toggle(id, actor.rol);
+    return this.service.toggle(id, actor.rol, actor.id);
   }
 
   @Delete(':id')
   remove(
     @Param('id', ParseIntPipe) id: number,
-    @UsuarioActual() actor: { rol: string },
+    @UsuarioActual() actor: { id: number; rol: string },
   ) {
-    return this.service.remove(id, actor.rol);
+    return this.service.remove(id, actor.rol, actor.id);
   }
 }
