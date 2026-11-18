@@ -13,6 +13,7 @@ import { RecepcionModule } from './recepcion/recepcion.module';
 import { LimpiezaModule } from './limpieza/limpieza.module';
 import { ReportesModule } from './reportes/reportes.module';
 import { BitacoraModule } from './bitacora/bitacora.module'; // <-- IMPORTACIÓN CAMBIADA
+import { LavanderiaModule } from './lavanderia/lavanderia.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -46,7 +47,8 @@ import { BitacoraModule } from './bitacora/bitacora.module'; // <-- IMPORTACIÓN
     RecepcionModule,
     LimpiezaModule,
     ReportesModule,
-    BitacoraModule, // <-- MÓDULO AGREGADO
+    BitacoraModule,
+    LavanderiaModule, // <-- MÓDULO AGREGADO
   ],
 })
 export class AppModule {}

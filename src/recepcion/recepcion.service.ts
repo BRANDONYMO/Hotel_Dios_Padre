@@ -85,7 +85,7 @@ export class RecepcionService {
       r.estado = 'Finalizada';
       await m.save(r);
       const est = await m.findOne(EstadoHabitacion, {
-        where: { nombre: 'Pendiente de limpieza' },
+        where: { nombre: 'Sucia' },
       });
       const links = await m.find(ReservacionHabitacion, {
         where: { reservacionId: r.id },
