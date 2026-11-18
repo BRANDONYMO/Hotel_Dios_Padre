@@ -48,7 +48,10 @@ const modules = [
   ],
   ['Reportes', 'reportes', '<i class="fa-solid fa-chart-line"></i>'],
 ];
-if (user?.rol === 'Superadministrador') modules.push(['Cortesías', 'cortesias', '<i class="fa-solid fa-percent"></i>']);
+if (user?.rol === 'Superadministrador') { 
+  modules.push(['Cortesías', 'cortesias', '<i class="fa-solid fa-percent"></i>']);
+  modules.push(['Bitácora', 'bitacora', '<i class="fa-solid fa-clipboard-list"></i>']);
+}
 // Inyectamos el icono junto al nombre (x[2] es el icono y x[0] el texto)
 nav.innerHTML = modules
   .map(
@@ -90,6 +93,7 @@ async function load(id, label) {
     if (id === 'usuarios') return await usuarios();
     if (id === 'cortesias') return await cortesias();
     if (id === 'reportes') return await reportes();
+    if (id === 'bitacora') return await bitacora(); // <-- LÍNEA NUEVA
     return await crud(id);
   } catch (e) {
     content.innerHTML = `<div class="box error"><strong>No se pudo cargar el módulo.</strong><p>${esc(e.message)}</p><button class=primary onclick="load('${esc(id)}','${esc(label)}')">Reintentar</button></div>`;
@@ -1980,3 +1984,55 @@ const observarCortesia = new MutationObserver(async () => {
   }
 });
 observarCortesia.observe(content, { childList: true, subtree: true });
+
+async function bitacora() {
+  // Verificamos por seguridad extra que nadie más entre aquí
+  if (user?.rol !== 'Superadministrador') {
+    return content.innerHTML = `<div class="box error">Acceso denegado. Solo el Superadministrador puede ver la bitácora.</div>`;
+  }
+
+  // Pedimos los datos al backend
+  const rows = await api('/bitacora');
+  
+  content.innerHTML = `
+    <section class="reservation-hero">
+      <div>
+        <p class="eyebrow">Seguridad y control</p>
+        <h2>Bitácora de Actividades</h2>
+        <p>Registro inalterable de modificaciones, cancelaciones y movimientos del sistema.</p>
+      </div>
+      <div class="instant-badge" style="background: #991b1b; color: white;">Solo Superadministrador</div>
+    </section>
+    
+    <div class="box table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Fecha</th>
+            <th>Hora</th>
+            <th>Acción realizada</th>
+            <th>Información modificada</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length ? rows.map(r => {
+            // Separamos la fecha y la hora para cumplir con la rúbrica
+            const f = new Date(r.fechaHora);
+            const fecha = f.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const hora = f.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+            const nombreCompleto = r.usuario ? esc(r.usuario.nombre + ' ' + (r.usuario.apellidoPaterno || '')) : 'Sistema';
+            
+            return `<tr>
+              <td><strong><i class="fa-solid fa-user-shield" style="color: #64748b; margin-right: 4px;"></i> ${nombreCompleto}</strong></td>
+              <td>${fecha}</td>
+              <td>${hora}</td>
+              <td><span class="badge">${esc(r.accion)}</span></td>
+              <td><small>${esc(r.detalles || 'Sin detalles')}</small></td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="5" style="text-align:center; padding: 20px;">No hay movimientos registrados aún.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+}

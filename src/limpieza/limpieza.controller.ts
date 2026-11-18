@@ -13,20 +13,36 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UsuarioActual } from '../common/decorators/usuario-actual.decorator';
 import { LimpiezaService } from './limpieza.service';
+
 @Controller('limpieza')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class LimpiezaController {
   constructor(private s: LimpiezaService) {}
-  @Get() @Roles('Administrador') list() {
+  
+  @Get() 
+  @Roles('Administrador') 
+  list() {
     return this.s.list();
   }
-  @Get('observaciones') @Roles('Administrador') obs() {
+  
+  @Get('observaciones') 
+  @Roles('Administrador') 
+  obs() {
     return this.s.observaciones();
   }
-  @Post('asignar') @Roles('Administrador') asig(@Body() d: any) {
-    return this.s.asignar(d);
+  
+  @Post('asignar') 
+  @Roles('Administrador') 
+  asig(
+    @Body() d: any,
+    @UsuarioActual() u: any
+  ) {
+    return this.s.asignar(d, u.id);
   }
-  @Patch(':id/estado') @Roles('Camarista', 'Administrador') estado(
+  
+  @Patch(':id/estado') 
+  @Roles('Camarista', 'Administrador') 
+  estado(
     @Param('id', ParseIntPipe) id: number,
     @Body() d: any,
     @UsuarioActual() u: any,

@@ -11,6 +11,7 @@ import { Rol } from '../roles/entities/rol.entity';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import { Usuario } from './entities/usuario.entity';
+import { BitacoraService } from '../bitacora/bitacora.service';
 
 @Injectable()
 export class UsuariosService {
@@ -20,6 +21,8 @@ export class UsuariosService {
 
     @InjectRepository(Rol)
     private readonly rolesRepo: Repository<Rol>,
+
+    private readonly bitacoraService: BitacoraService,
   ) {}
 
   findAll() {
@@ -139,7 +142,7 @@ export class UsuariosService {
     };
   }
 
-  async create(dto: CreateUsuarioDto, actorRol?: string) {
+  async create(dto: CreateUsuarioDto, actorRol?: string, actorId?: number) {
     this.protegerRol(await this.validarRol(dto.rolId), actorRol);
 
     await this.validarDuplicados(dto.usuario, dto.correo);
@@ -160,13 +163,21 @@ export class UsuariosService {
 
     const usuarioGuardado = await this.repo.save(nuevoUsuario);
 
+    if (actorId) {
+      await this.bitacoraService.registrarAccion(
+        actorId,
+        'Creación de usuario',
+        `Se creó el usuario "${usuarioGuardado.usuario}"`
+      );
+    }
+
     return {
       message: 'Usuario registrado correctamente',
       usuario: this.limpiarRespuesta(usuarioGuardado),
     };
   }
 
-  async update(id: number, dto: UpdateUsuarioDto, actorRol?: string) {
+  async update(id: number, dto: UpdateUsuarioDto, actorRol?: string, actorId?: number) {
     const usuario = await this.repo.findOne({
       where: {
         id,
@@ -191,6 +202,13 @@ export class UsuariosService {
       usuario.id,
     );
 
+   const cambios: string[] = [];
+    if (dto.nombre !== undefined && dto.nombre !== usuario.nombre) cambios.push('nombre');
+    if (dto.usuario !== undefined && dto.usuario !== usuario.usuario) cambios.push('usuario');
+    if (dto.correo !== undefined && dto.correo !== usuario.correo) cambios.push('correo');
+    if (dto.rolId !== undefined && dto.rolId !== usuario.rolId) cambios.push('rol de acceso');
+    if (dto.password) cambios.push('contraseña');
+
     usuario.nombre = dto.nombre ?? usuario.nombre;
     usuario.apellidoPaterno =
       dto.apellidoPaterno !== undefined
@@ -213,12 +231,20 @@ export class UsuariosService {
 
     await this.repo.save(usuario);
 
+    if (actorId && cambios.length > 0) {
+      await this.bitacoraService.registrarAccion(
+        actorId,
+        'Modificación de usuario',
+        `Se modificó: ${cambios.join(', ')} del usuario "${usuario.usuario}"`
+      );
+    }
+
     return {
       message: 'Usuario actualizado correctamente',
     };
   }
 
-  async toggle(id: number, actorRol?: string) {
+  async toggle(id: number, actorRol?: string, actorId?: number) {
     const usuario = await this.repo.findOne({
       where: {
         id,
@@ -234,6 +260,15 @@ export class UsuariosService {
 
     await this.repo.save(usuario);
 
+    if (actorId) {
+      const estado = usuario.activo ? 'activó' : 'desactivó';
+      await this.bitacoraService.registrarAccion(
+        actorId,
+        'Cambio de estado de usuario',
+        `Se ${estado} el acceso al sistema del usuario "${usuario.usuario}"`
+      );
+    }
+
     return {
       message: usuario.activo
         ? 'Usuario activado correctamente'
@@ -242,7 +277,7 @@ export class UsuariosService {
     };
   }
 
-  async remove(id: number, actorRol?: string) {
+  async remove(id: number, actorRol?: string, actorId?: number) {
     const usuario = await this.repo.findOne({
       where: {
         id,
@@ -263,6 +298,14 @@ export class UsuariosService {
     usuario.activo = false;
 
     await this.repo.save(usuario);
+
+    if (actorId) {
+      await this.bitacoraService.registrarAccion(
+        actorId,
+        'Eliminación de usuario',
+        `Se dio de baja (desactivó) al usuario "${usuario.usuario}"`
+      );
+    }
 
     return {
       message: 'Usuario desactivado correctamente',

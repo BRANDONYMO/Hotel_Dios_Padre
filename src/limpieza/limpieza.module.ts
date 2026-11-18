@@ -6,6 +6,8 @@ import { EstadoHabitacion } from '../habitaciones/entities/estado-habitacion.ent
 import { Observacion } from '../observaciones/observacion.entity';
 import { LimpiezaService } from './limpieza.service';
 import { LimpiezaController } from './limpieza.controller';
+import { BitacoraModule } from '../bitacora/bitacora.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -14,6 +16,7 @@ import { LimpiezaController } from './limpieza.controller';
       EstadoHabitacion,
       Observacion,
     ]),
+    BitacoraModule,
   ],
   providers: [LimpiezaService],
   controllers: [LimpiezaController],

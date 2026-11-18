@@ -9,6 +9,7 @@ import { Reservacion } from './entities/reservacion.entity';
 import { Pago } from './entities/pago.entity';
 import { ReservacionesController } from './reservaciones.controller';
 import { ReservacionesService } from './reservaciones.service';
+import { BitacoraModule } from '../bitacora/bitacora.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ReservacionesService } from './reservaciones.service';
       Huesped,
       Pago,
     ]),
+   BitacoraModule, // <-- 2. Agrega BitacoraModule aquí dentro de imports
   ],
   providers: [ReservacionesService],
   controllers: [ReservacionesController, CortesiasController],
