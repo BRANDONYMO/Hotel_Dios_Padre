@@ -47,6 +47,7 @@ const modules = [
     '<i class="fa-solid fa-key"></i>',
   ],
   ['Reportes', 'reportes', '<i class="fa-solid fa-chart-line"></i>'],
+  ['Lavandería', 'lavanderia', '<i class="fa-solid fa-tshirt"></i>'], // <-- LÍNEA NUEVA
 ];
 if (user?.rol === 'Superadministrador') { 
   modules.push(['Cortesías', 'cortesias', '<i class="fa-solid fa-percent"></i>']);
@@ -94,6 +95,7 @@ async function load(id, label) {
     if (id === 'cortesias') return await cortesias();
     if (id === 'reportes') return await reportes();
     if (id === 'bitacora') return await bitacora(); // <-- LÍNEA NUEVA
+    if (id === 'lavanderia') return await lavanderia();
     return await crud(id);
   } catch (e) {
     content.innerHTML = `<div class="box error"><strong>No se pudo cargar el módulo.</strong><p>${esc(e.message)}</p><button class=primary onclick="load('${esc(id)}','${esc(label)}')">Reintentar</button></div>`;
@@ -157,7 +159,7 @@ async function habitaciones() {
           placeholder="Ej. 101"
           required
           minlength="1"
-          maxlength="4"
+          maxlength="3"
           inputmode="numeric"
           pattern="[0-9]{1,4}"
           title="Ingresa únicamente números"
@@ -171,7 +173,7 @@ async function habitaciones() {
           type="number"
           placeholder="Ej. 1"
           min="0"
-          max="20"
+          max="5"
           step="1"
           inputmode="numeric"
         >
@@ -216,11 +218,13 @@ async function habitaciones() {
       </label>
 
       <label class="wide">
-        <span>Observaciones</span>
+        <span>Observaciones <small id="contadorLetras" style="color:#64748b; font-weight:normal;">(0 / 50 letras)</small></span>
         <textarea
           name="observaciones"
-          placeholder="Detalles o notas de la habitación"
-          maxlength="1000"
+          id="txtObservacionesHab"
+          placeholder="Detalles (máx. 50 letras)"
+          rows="2"
+          maxlength="50"
         ></textarea>
       </label>
 
@@ -247,20 +251,42 @@ async function habitaciones() {
   </div>
 `;
   habitacionForm.onsubmit = guardarHabitacion;
+
+  // 1. Número de habitación: solo números, máximo hasta el 200
   habitacionForm.numero.addEventListener('input', (event) => {
-    event.target.value = event.target.value.replace(/\D/g, '').slice(0, 4);
-  });
-
-  habitacionForm.piso.addEventListener('input', (event) => {
-    const valor = event.target.value.replace(/\D/g, '').slice(0, 3);
-
-    if (valor === '') {
-      event.target.value = '';
-      return;
+    let val = event.target.value.replace(/\D/g, '');
+    if (val !== '') {
+      let num = Number(val);
+      if (num > 200) num = 200; // Tope máximo
+      val = String(num);
     }
-
-    event.target.value = Math.min(Number(valor), 20);
+    event.target.value = val;
   });
+
+  // 2. Piso: solo números del 1 al 5
+  habitacionForm.piso.addEventListener('input', (event) => {
+    let val = event.target.value.replace(/\D/g, '');
+    if (val !== '') {
+      let num = Number(val);
+      if (num < 1) num = 1;
+      if (num > 5) num = 5; // Tope máximo 5 pisos
+      val = String(num);
+    }
+    event.target.value = val;
+  });
+
+// 3. Observaciones: Contador en vivo de 30 letras (caracteres)
+  const txtObs = document.getElementById('txtObservacionesHab');
+  const contador = document.getElementById('contadorLetras');
+  
+  if (txtObs && contador) {
+    txtObs.addEventListener('input', () => {
+      let longitud = txtObs.value.length;
+      
+      contador.textContent = `(${longitud} / 50 letras)`;
+      contador.style.color = longitud === 50 ? '#dc2626' : '#64748b';
+    });
+  }
 }
 async function guardarHabitacion(e) {
   e.preventDefault();
@@ -521,7 +547,7 @@ const camposCrud = {
     'password',
     'rolId',
   ],
-  'tipos-habitacion': ['nombre', 'descripcion', 'capacidad', 'camas', 'precio'],
+  'tipos-habitacion': ['nombre', 'descripcion', 'camas', 'capacidad', 'precio'],
 };
 async function crud(id) {
   const rows = await api('/' + id),
@@ -535,6 +561,60 @@ async function crud(id) {
     </div>
     <div class="instant-badge">Inventario de Habitaciones</div>
   </section><div class=box><h3 id=crudTitle>Nuevo registro</h3><form id=f><input type=hidden name=id>${fields.map((x) => `<input name=${x} placeholder="${x}" ${x === 'password' ? 'type=password' : ''} ${x === 'nombre' ? 'required' : ''}>`).join('')}<button class=primary><i class="fa-solid fa-floppy-disk"></i> Guardar</button><button class="primary danger" type=button onclick="crud('${id}')"><i class="fa-solid fa-ban"></i> Cancelar edición</button></form></div><div class="box table-wrap"><table><thead><tr>${visibles.map((x) => `<th>${esc(x)}</th>`).join('')}<th>Acciones</th></tr></thead><tbody>${rows.map((r) => `<tr>${visibles.map((x) => `<td>${esc(r[x] ?? (x === 'rolId' ? r.rol?.nombre : ''))}</td>`).join('')}<td class=actions><button class="btn-editar" onclick='editarCrud(${JSON.stringify(id)},${JSON.stringify(r).replace(/'/g, '&#39;')})'><i class="fa-solid fa-pen-to-square"></i> Editar</button><button class="danger btn-eliminar" onclick="eliminarCrud('${id}',${r.id})"><i class="fa-solid fa-trash-can"></i> Eliminar</button></td></tr>`).join('')}</tbody></table></div>`;
+  // --- VALIDACIONES DE TIPOS DE HABITACIÓN ---
+  if (id === 'tipos-habitacion') {
+    setTimeout(() => {
+      const form = document.getElementById('f');
+      if (!form) return;
+      
+      // 1. Nombre: Solo letras y máximo 30
+      if (form.nombre) {
+        form.nombre.maxLength = 30;
+        form.nombre.addEventListener('input', function() {
+          this.value = this.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ ]/g, '');
+        });
+      }
+      
+      // 2. Descripción: Máximo 30 letras para que no hagan novelas
+      if (form.descripcion) {
+        form.descripcion.maxLength = 30;
+      }
+      
+      // 3. Camas y Capacidad (¡Magia conectada!)
+      if (form.camas && form.capacidad) {
+        form.camas.type = 'number';
+        form.camas.min = 1;
+        form.capacidad.type = 'number';
+        form.capacidad.min = 1;
+        
+        // Al escribir la cantidad de camas, calcula automáticamente la capacidad
+        form.camas.addEventListener('input', function() {
+          this.value = this.value.replace(/[^0-9]/g, '');
+          let cantidadCamas = parseInt(this.value) || 0;
+          if (cantidadCamas > 0) {
+            // Calcula 2 personas por cama (lo normal de una cama matrimonial)
+            form.capacidad.value = cantidadCamas * 2; 
+          }
+        });
+        
+        // Evita que metan letras o símbolos en la capacidad manual
+        form.capacidad.addEventListener('input', function() {
+          this.value = this.value.replace(/[^0-9]/g, '');
+        });
+      }
+      
+      // 4. Precio: Solo números, dinero positivo
+      if (form.precio) {
+        form.precio.type = 'number';
+        form.precio.min = 0.01;
+        form.precio.step = '0.01';
+        form.precio.addEventListener('input', function() {
+          if (this.value < 0) this.value = Math.abs(this.value);
+        });
+      }
+    }, 50);
+  }
+  // --- FIN DE VALIDACIONES ---
   f.onsubmit = async (e) => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(f)),
@@ -906,8 +986,12 @@ async function limpieza() {
   const cams = us.filter((x) => x.rol?.nombre === 'Camarista'),
     pendientes = rows.filter((x) => x.estado !== 'Finalizada'),
     finalizadas = rows.filter((x) => x.estado === 'Finalizada');
+ // 🔥 CORRECCIÓN: Evitar mostrar habitaciones que ya están asignadas a una camarista
+  const idsEnLimpieza = pendientes.map(p => Number(p.habitacion_id || p.habitacionId));
   const habitacionesAsignables = hs.filter(
-    (x) => x.activa && x.estado?.nombre !== 'Ocupada',
+    (x) => x.activa && 
+           (x.estado?.nombre === 'Sucia' || x.estado?.nombre === 'Pendiente de limpieza') &&
+           !idsEnLimpieza.includes(Number(x.id))
   );
   content.innerHTML = `<section class=cleaning-hero><div><p class=eyebrow>Control de limpieza</p><h2>Habitaciones y camaristas</h2><p>Asigna tareas y consulta qué habitaciones ya quedaron disponibles.</p></div><div class=cleaning-counters><span><strong>${pendientes.length}</strong>Pendientes</span><span><strong>${finalizadas.length}</strong>Finalizadas</span></div></section><div class="box cleaning-assignment"><h3>Nueva asignación</h3><form id=f>${campo('Habitación *', `<select name=habitacionId required><option value="">Selecciona habitación</option>${habitacionesAsignables.map((x) => `<option value=${x.id}>Habitación ${esc(x.numero)} · ${esc(x.estado?.nombre || '')}</option>`).join('')}</select>`)}${campo('Camarista *', `<select name=camaristaId required><option value="">Selecciona camarista</option>${cams.map((x) => `<option value=${x.id}>${esc(x.nombre)}</option>`).join('')}</select>`)}${campo('Fecha *', `<input name=fecha type=date required value=${new Date().toISOString().slice(0, 10)}>`)}<div class="form-btn-container"><button class="primary btn-assign-cleaning"><i class="fa-solid fa-paint-roller"></i>Asignar limpieza</button></div></form></div><div class=section-title><div><h2>En limpieza</h2><p>Estas tareas siguen visibles para las camaristas.</p></div></div><div class=cleaning-list>${pendientes.length ? pendientes.map(limpiezaCard).join('') : '<div class=queue-empty>No hay limpiezas pendientes</div>'}</div><div class="section-title completed-heading"><div><h2>Habitaciones finalizadas</h2><p>Ya aparecen como Disponibles para Administración y se conservan aquí como registro.</p></div><span class=completed-total>${finalizadas.length} registros</span></div><div class="cleaning-list completed-list">${finalizadas.length ? finalizadas.map(limpiezaCard).join('') : '<div class=queue-empty>Aún no hay habitaciones finalizadas</div>'}</div><details class=reception-history><summary>Observaciones e incidencias (${obs.length})</summary>${table(obs)}</details>`;
   f.onsubmit = (e) => sendForm(e, '/limpieza/asignar', limpieza);
@@ -1185,21 +1269,56 @@ async function usuarios() {
   </div>
 `;
   usuarioForm.onsubmit = guardarUsuario;
-  usuarioForm.telefono.addEventListener(
-    'input',
-    (e) => (e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10)),
-  );
-  const camposNombre = [
-    usuarioForm.nombre,
-    usuarioForm.apellidoPaterno,
-    usuarioForm.apellidoMaterno,
-  ];
-
-  camposNombre.forEach((input) => {
-    input.addEventListener('input', () => {
-      input.value = input.value.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü '-]/g, '');
+  // --- VALIDACIONES EN VIVO PARA USUARIOS ---
+  const fUser = document.getElementById('usuarioForm');
+  if (fUser) {
+    
+    // 1. Nombres y Apellidos: Letras, espacios, max 30, bloquea repeticiones absurdas
+    ['nombre', 'apellidoPaterno', 'apellidoMaterno'].forEach(campo => {
+      if (fUser[campo]) {
+        fUser[campo].maxLength = 25;
+        fUser[campo].addEventListener('input', function() {
+          let val = this.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ ]/g, ''); // Solo letras
+          if (/(.)\1{2}/i.test(val)) val = val.slice(0, -1); // Bloquea 3 iguales (ej. "aaa")
+          this.value = val;
+        });
+      }
     });
-  });
+
+    // 2. Teléfono: Solo 10 números, bloquea teclado si meten 5 iguales (ej. 33333)
+    if (fUser.telefono) {
+      fUser.telefono.maxLength = 10;
+      fUser.telefono.addEventListener('input', function() {
+        let val = this.value.replace(/[^0-9]/g, '').slice(0, 10);
+        if (/(.)\1{4}/.test(val)) val = val.slice(0, -1); 
+        this.value = val;
+      });
+    }
+
+    // 3. Nombre de Usuario: SIN ESPACIOS, letras, números, puntos y guiones, max 20
+    if (fUser.usuario) {
+      fUser.usuario.maxLength = 20;
+      fUser.usuario.addEventListener('input', function() {
+        this.value = this.value.replace(/[^a-zA-Z0-9._-]/g, '');
+      });
+    }
+
+    // 4. Correo: SIN ESPACIOS, max 50
+    if (fUser.correo) {
+      fUser.correo.maxLength = 50;
+      fUser.correo.addEventListener('input', function() {
+        this.value = this.value.replace(/[^a-zA-Z0-9@._-]/g, '').toLowerCase();
+      });
+    }
+    
+    // 5. Contraseña: SIN ESPACIOS (para que no metan espacios accidentales y luego no puedan entrar)
+    if (fUser.password) {
+      fUser.password.maxLength = 72;
+      fUser.password.addEventListener('input', function() {
+        this.value = this.value.replace(/\s/g, ''); 
+      });
+    }
+  }
 }
 
 function campoUsuario(etiqueta, nombre, tipo = 'text', atributos = '') {
@@ -1667,36 +1786,95 @@ window.formularioReservaHtml = function (titulo) {
   setTimeout(() => {
     cargarPreciosHabitacionesPago().then(() => renderTablaPagosReserva());
   }, 50);
+  // 👇 AQUÍ PEGAS EL CÓDIGO (Paso 2) JUSTO ANTES DEL RETURN 👇
+  setTimeout(() => {
+    // 1. Nombres y Apellidos (Max 30, sin números, bloquea 3 letras repetidas seguidas)
+    const limpiarTexto = (input) => {
+      if (!input) return;
+      input.addEventListener('input', function() {
+        let val = this.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ ]/g, ''); // Solo letras y espacios
+        // Bloquea si hay 3 letras iguales seguidas (ej: "aaa")
+        if (/(.)\1{2}/i.test(val)) {
+          val = val.slice(0, -1);
+        }
+        this.value = val;
+      });
+    };
+    limpiarTexto(document.getElementById('resNombre'));
+    limpiarTexto(document.getElementById('resApPaterno'));
+    limpiarTexto(document.getElementById('resApMaterno'));
+
+    // 2. Teléfono (Exacto 10, solo números, bloquea 4 números repetidos seguidos)
+    const telInput = document.getElementById('resTelefono');
+    if (telInput) {
+      telInput.addEventListener('input', function() {
+        let val = this.value.replace(/[^0-9]/g, ''); // Solo números
+        // Bloquea si hay 4 números iguales seguidos (ej: "3333")
+        if (/(.)\1{3}/.test(val)) {
+          val = val.slice(0, -1); 
+        }
+        this.value = val;
+      });
+    }
+
+    // 3. Identificación (Max 12, SOLO LETRAS, mayúsculas)
+    const idInput = document.getElementById('resIdentificacion');
+    if (idInput) {
+      idInput.addEventListener('input', function() {
+        // Reemplaza números y espacios, deja solo letras y lo pasa a mayúsculas
+        this.value = this.value.replace(/[^a-zA-Z]/g, '').toUpperCase();
+      });
+    }
+
+    // 4. Correo (Validación al salir del campo - "blur")
+    const correoInput = document.getElementById('resCorreo');
+    if (correoInput) {
+      correoInput.addEventListener('blur', function() {
+        if (this.value === '') return;
+        // Valida que termine en dominios conocidos
+        const regexCorreo = /^[a-zA-Z0-9._-]+@(gmail\.com|outlook\.com|hotmail\.com|yahoo\.com)$/i;
+        if (!regexCorreo.test(this.value)) {
+          alert('Por favor, ingresa un correo válido (ej. @gmail.com, @outlook.com).');
+          this.value = ''; // Lo borra si es inválido
+        }
+      });
+    }
+  }, 100);
 
   return `<section class="reservation-hero"><div><p class=eyebrow>Atención presencial</p><h2>${titulo}</h2><p>Captura al cliente, consulta disponibilidad y confirma su habitación inmediatamente.</p></div><div class=instant-badge>Confirmación Inmediata</div></section>
   <div class="box reservation-form-box">
     <form id=reservaForm>
       <input type=hidden name=id>
       <input type=hidden name=huespedId>
-      <fieldset>
+     <fieldset>
         <legend>1. Datos del cliente</legend>
         <div class=form-grid>
-          ${campo('Nombre *', '<input name=nombre placeholder="Ej. María" required>')}
-          ${campo('Apellido paterno *', '<input name=apellidoPaterno placeholder="Ej. Hernández" required>')}
-          ${campo('Apellido materno', '<input name=apellidoMaterno placeholder="Ej. López">')}
-          ${campo('Teléfono *', '<input name=telefono type=tel placeholder="Ej. 772 123 4567" required>')}
-          ${campo('Correo electrónico', '<input name=correo type=email placeholder="cliente@correo.com">')}
-          ${campo('Identificación', '<input name=identificacion placeholder="INE o pasaporte">')}
-          ${campo('Dirección', '<textarea name=direccion placeholder="Domicilio del cliente"></textarea>', 'wide')}
+          ${campo('Nombre *', '<input name="nombre" id="resNombre" placeholder="Ej. María" required maxlength="30">')}
+          ${campo('Apellido paterno *', '<input name="apellidoPaterno" id="resApPaterno" placeholder="Ej. Hernández" required maxlength="30">')}
+          ${campo('Apellido materno', '<input name="apellidoMaterno" id="resApMaterno" placeholder="Ej. López" maxlength="30">')}
+          ${campo('Teléfono *', '<input name="telefono" id="resTelefono" type="tel" placeholder="Ej. 7721234567" required minlength="10" maxlength="10">')}
+          ${campo('Correo electrónico', '<input name="correo" id="resCorreo" type="email" placeholder="cliente@gmail.com" maxlength="50">')}
+          ${campo('Identificación', '<input name="identificacion" id="resIdentificacion" placeholder="INE o pasaporte" maxlength="12">')}
+          ${campo('Dirección', '<textarea name="direccion" id="resDireccion" placeholder="Domicilio del cliente" maxlength="30" rows="2"></textarea>', 'wide')}
         </div>
       </fieldset>
+      
       <fieldset>
         <legend>2. Datos de la estancia</legend>
         <div class=form-grid>
-          ${campo('Fecha de entrada *', '<input name=fechaInicio type=date required onchange="recalcularSaldosPago()">')}
-          ${campo('Fecha de salida *', '<input name=fechaFin type=date required onchange="recalcularSaldosPago()">')}
-          ${campo('Cortesía (%)', '<input name=cortesiaPorcentaje type=number min=0 max=100 step=0.01 value=0 required aria-describedby="limiteCortesia errorCortesia" oninput="recalcularSaldosPago()" onchange="recalcularSaldosPago()"><small id=errorCortesia role=alert aria-live=polite style="color:#b91c1c" hidden></small>')}
+          ${campo('Fecha de entrada *', '<input name="fechaInicio" type="date" required onchange="recalcularSaldosPago()">')}
+          
+          ${campo('Fecha de salida *', '<input name="fechaFin" type="date" required onchange="recalcularSaldosPago()">')}
+          
+          ${campo('Cortesía (%)', '<input name="cortesiaPorcentaje" type="number" min="0" max="100" step="0.01" value="0" required aria-describedby="limiteCortesia errorCortesia" oninput="recalcularSaldosPago()" onchange="recalcularSaldosPago()"><small id="errorCortesia" role="alert" aria-live="polite" style="color:#b91c1c" hidden></small>')}
           <p id=limiteCortesia>Consultando límite autorizado…</p>
-          ${campo('Adultos *', '<input name=adultos type=number min=1 value=1 required>')}
-          ${campo('Menores', '<input name=menores type=number min=0 value=0>')}
+          
+          ${campo('Adultos *', '<input name="adultos" type="number" min="1" max="15" value="1" required oninput="let v = this.value.replace(/[^0-9]/g, \'\'); if(v > 15) v = 15; this.value = v;">')}
+          
+          ${campo('Menores', '<input name="menores" type="number" min="0" max="15" value="0" oninput="let v = this.value.replace(/[^0-9]/g, \'\'); if(v > 15) v = 15; this.value = v;">')}
         </div>
         <div class="form-btn-container">
-          <button type=button class="btn-search action-btn" onclick="buscarDisponibles()"><i class="fa-solid fa-magnifying-glass"></i> Buscar habitaciones</button>
+          <button type="button" class="btn-search action-btn" onclick="buscarDisponibles()"><i class="fa-solid fa-magnifying-glass"></i> Buscar habitaciones</button>
         </div>
       </fieldset>
     </form>
@@ -1728,7 +1906,7 @@ window.formularioReservaHtml = function (titulo) {
 
         <label class="form-field">
           <span>Importe ($) *</span>
-          <input id="pago_importe" type="number" min="0.01" step="0.01" placeholder="Ej. 1500.00">
+          <input id="pago_importe" type="number" min="0.01" step="0.01" placeholder="Ej. 1500.00"oninput="if(this.value < 0) this.value = Math.abs(this.value)">
         </label>
 
         <label class="form-field" id="wrap_banco">
@@ -1949,7 +2127,28 @@ window.editarReserva = async function (r) {
 async function cortesias() {
   try {
     const config = await api('/configuracion/cortesias');
-    content.innerHTML = `<div class="box"><h2>Límite de cortesías</h2><p>Porcentaje máximo para nuevas cortesías y modificaciones de reservaciones. No cambia reservaciones guardadas.</p><form id="cortesiasForm"><label>Máximo autorizado (%) <input name="maximo" type="number" min="0" max="100" step="0.01" required value="${config.maximoPorcentaje}"></label><button class="primary">Guardar límite</button></form></div>`;
+    content.innerHTML = `
+      <section class="reservation-hero">
+        <div>
+          <p class="eyebrow">Gestión Administrativa</p>
+          <h2>Límite de Cortesías</h2>
+          <p>Define el porcentaje máximo de descuento autorizado para reservaciones.</p>
+        </div>
+        <div class="instant-badge" style="background:#0369a1; color:white;">Solo Superadministrador</div>
+      </section>
+
+      <div class="box">
+        <h3>Ajuste de límite global</h3>
+        <p style="margin-bottom: 20px; color: #475569;">Este límite aplica para nuevas cortesías y modificaciones. Las reservaciones previamente guardadas no se verán afectadas.</p>
+        
+        <form id="cortesiasForm" style="display: flex; gap: 15px; align-items: flex-end;">
+          <label class="form-field" style="flex: 1;">
+            <span>Máximo autorizado (%) *</span>
+            <input name="maximo" type="number" min="0" max="100" step="0.01" required value="${config.maximoPorcentaje}">
+          </label>
+          <button class="primary" style="height: 42px;"><i class="fa-solid fa-floppy-disk"></i> Guardar límite</button>
+        </form>
+      </div>`;
     document.getElementById('cortesiasForm').onsubmit = async (event) => {
       event.preventDefault();
       try {
@@ -2036,3 +2235,294 @@ async function bitacora() {
     </div>
   `;
 }
+// ==========================================
+// MÓDULO V. LAVANDERÍA Y CONTROL DE BLANCOS
+// ==========================================
+async function lavanderia() {
+  const [inventario, blancos] = await Promise.all([
+    api('/lavanderia/inventario'),
+    api('/lavanderia/blancos'),
+  ]);
+
+  content.innerHTML = `
+    <section class="reservation-hero">
+      <div>
+        <p class="eyebrow">Gestión Operativa</p>
+        <h2>Control de Lavandería</h2>
+        <p>Administra el inventario de ropa de cama y registra los movimientos diarios de blancos.</p>
+      </div>
+      <div class="instant-badge" style="background:#0369a1; color:white;">Módulo de Limpieza</div>
+    </section>
+
+    <!-- Pestañas -->
+    <div style="margin-bottom:20px; display:flex; gap:10px;">
+      <button class="primary" id="btnTabInventario" onclick="cambiarTabLavanderia('inventario')">Inventario General</button>
+      <button class="btn-secondary" id="btnTabBlancos" onclick="cambiarTabLavanderia('blancos')" style="padding:10px 16px; border-radius:6px; border:1px solid #ccc; background:#fff; cursor:pointer;">Control de Blancos</button>
+    </div>
+
+    <!-- PESTAÑA INVENTARIO -->
+    <div id="tabInventario">
+      <div class="box">
+        <h3 id="tituloFormInventario">Nuevo registro</h3>
+        <form id="formInventarioLavanderia">
+          <input type="hidden" name="id">
+          <input name="articulo" type="text" placeholder="Artículo (Ej. Toalla)" required>
+          <input name="unidad" type="number" min="1" value="1" placeholder="Unidad" required>
+          <input name="codigo" type="text" placeholder="Código (Ej. TOA-01)" required>
+          <select name="estado" required>
+            <option value="BUENO">BUENO</option>
+            <option value="MEDIO">MEDIO</option>
+            <option value="MALO">MALO</option>
+          </select>
+          <input name="modelo" type="text" placeholder="Modelo o Marca">
+          <input name="responsable" type="text" placeholder="Responsable">
+          <input name="observaciones" type="text" placeholder="Observaciones o notas">
+          
+          <button class="primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+          <button class="primary danger" type="button" onclick="lavanderia()"><i class="fa-solid fa-ban"></i> Cancelar edición</button>
+        </form>
+      </div>
+
+      <div class="box table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Artículo</th>
+              <th>Estado</th>
+              <th>Modelo</th>
+              <th>Responsable</th>
+              <th>Fecha</th>
+              <th>Observaciones</th> <!-- NUEVO -->
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${inventario.length ? inventario.map(i => `
+              <tr>
+                <td><strong>${esc(i.codigo)}</strong></td>
+                <td>${esc(i.articulo)} <small>(${i.unidad} unidad)</small></td>
+                <td><span class="badge" style="background:${i.estado === 'BUENO' ? '#166534' : i.estado === 'MALO' ? '#991b1b' : '#b45309'}; color:white;">${esc(i.estado)}</span></td>
+                <td>${esc(i.modelo || '-')}</td>
+                <td>${esc(i.responsable || '-')}</td>
+                <td>${esc(new Date(i.fecha).toLocaleDateString('es-MX', {day: '2-digit', month: '2-digit', year: 'numeric'}))}</td>
+                <td><small>${esc(i.observaciones || '-')}</small></td> <!-- NUEVO -->
+                <td class="actions">
+                  <button class="btn-editar" onclick="editarInventarioLav(decodeURIComponent('${datosJs(i)}'))"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                  <button class="danger btn-eliminar" onclick="eliminarInventarioLav(${i.id})"><i class="fa-solid fa-trash-can"></i> Eliminar</button>
+                </td>
+              </tr>
+            `).join('') : '<tr><td colspan="8" style="text-align:center; padding:20px;">No hay inventario registrado.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PESTAÑA BLANCOS -->
+    <div id="tabBlancos" style="display:none;">
+      <div class="box">
+        <h3 id="tituloFormBlancos">Nuevo registro</h3>
+        <form id="formControlBlancos">
+          <input type="hidden" name="id">
+          <input name="articulo" type="text" placeholder="Artículo (Ej. Sábana)" required>
+          <input name="cantidad" type="number" min="1" placeholder="Cantidad" required>
+          <select name="estado" required>
+            <option value="Enviada">Enviada a lavado</option>
+            <option value="Limpia">Limpia (Regresa)</option>
+            <option value="En proceso">En proceso</option>
+            <option value="Dañada">Dañada</option>
+            <option value="Baja">Baja</option>
+            <option value="Inventario">Inventario inicial</option>
+          </select>
+          <input name="observaciones" type="text" placeholder="Detalles de daños o incidencias">
+          
+          <button class="primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+          <button class="primary danger" type="button" onclick="lavanderia()"><i class="fa-solid fa-ban"></i> Cancelar edición</button>
+        </form>
+      </div>
+
+      <div class="box table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Artículo</th>
+              <th>Cantidad</th>
+              <th>Estado/Movimiento</th>
+              <th>Observaciones</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${blancos.length ? blancos.map(b => `
+              <tr>
+                <td>${esc(new Date(b.fechaRegistro).toLocaleDateString('es-MX', {day: '2-digit', month: '2-digit', year: 'numeric'}))}</td>
+                <td><strong>${esc(b.articulo)}</strong></td>
+                <td>${esc(b.cantidad)}</td>
+                <td><span class="badge" style="background:#334155; color:white;">${esc(b.estado)}</span></td>
+                <td><small>${esc(b.observaciones || '-')}</small></td>
+                <td class="actions">
+                  <button class="btn-editar" onclick="editarControlBlancos(decodeURIComponent('${datosJs(b)}'))"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                  <button class="danger btn-eliminar" onclick="eliminarControlBlancos(${b.id})"><i class="fa-solid fa-trash-can"></i> Eliminar</button>
+                </td>
+              </tr>
+            `).join('') : '<tr><td colspan="6" style="text-align:center; padding:20px;">No hay movimientos registrados.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('formInventarioLavanderia').onsubmit = guardarInventarioLav;
+  document.getElementById('formControlBlancos').onsubmit = guardarControlBlancos;
+  
+  // --- VALIDACIONES EN VIVO PARA LAVANDERÍA ---
+  const formInv = document.getElementById('formInventarioLavanderia');
+  if (formInv) {
+    // Artículo y Responsable: Solo letras, max 30
+    ['articulo', 'responsable'].forEach(campo => {
+      if (formInv[campo]) {
+        formInv[campo].maxLength = 30;
+        formInv[campo].addEventListener('input', function() {
+          this.value = this.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ ]/g, '');
+        });
+      }
+    });
+    
+    // Modelo: Letras y números, max 30
+    if (formInv.modelo) {
+      formInv.modelo.maxLength = 30;
+      formInv.modelo.addEventListener('input', function() {
+        this.value = this.value.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]/g, '');
+      });
+    }
+
+    // Unidad: Solo números, max 4 dígitos
+    if (formInv.unidad) {
+      formInv.unidad.addEventListener('input', function() {
+        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 4);
+      });
+    }
+
+    // Código: Letras, números, guiones y MAYÚSCULAS automáticas
+    if (formInv.codigo) {
+      formInv.codigo.maxLength = 15;
+      formInv.codigo.addEventListener('input', function() {
+        this.value = this.value.replace(/[^a-zA-Z0-9-]/g, '').toUpperCase();
+      });
+    }
+
+    // Observaciones: max 50 caracteres
+    if (formInv.observaciones) formInv.observaciones.maxLength = 50;
+  }
+
+  const formBla = document.getElementById('formControlBlancos');
+  if (formBla) {
+    // Artículo: Solo letras, max 30
+    if (formBla.articulo) {
+      formBla.articulo.maxLength = 30;
+      formBla.articulo.addEventListener('input', function() {
+        this.value = this.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ ]/g, '');
+      });
+    }
+    
+    // Cantidad: Solo números, max 4 dígitos
+    if (formBla.cantidad) {
+      formBla.cantidad.addEventListener('input', function() {
+        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 4);
+      });
+    }
+
+    // Observaciones: max 50 caracteres
+    if (formBla.observaciones) formBla.observaciones.maxLength = 50;
+  }
+}
+
+window.cambiarTabLavanderia = function (tab) {
+  const tInv = document.getElementById('tabInventario');
+  const tBlan = document.getElementById('tabBlancos');
+  const bInv = document.getElementById('btnTabInventario');
+  const bBlan = document.getElementById('btnTabBlancos');
+
+  if (tab === 'inventario') {
+    tInv.style.display = 'block'; tBlan.style.display = 'none';
+    bInv.className = 'primary'; 
+    bBlan.className = 'btn-secondary'; bBlan.style = 'padding:10px 16px; border-radius:6px; border:1px solid #ccc; background:#fff; cursor:pointer;';
+  } else {
+    tInv.style.display = 'none'; tBlan.style.display = 'block';
+    bBlan.className = 'primary';
+    bBlan.style = ''; 
+    bInv.className = 'btn-secondary'; bInv.style = 'padding:10px 16px; border-radius:6px; border:1px solid #ccc; background:#fff; cursor:pointer;';
+  }
+};
+
+// --- FUNCIONES INVENTARIO ---
+async function guardarInventarioLav(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  const id = data.id; delete data.id;
+  data.unidad = Number(data.unidad);
+  
+  await api(id ? `/lavanderia/inventario/${id}` : '/lavanderia/inventario', {
+    method: id ? 'PATCH' : 'POST', body: JSON.stringify(data)
+  });
+  lavanderia();
+}
+
+window.editarInventarioLav = function (dataEnc) {
+  cambiarTabLavanderia('inventario');
+  const item = JSON.parse(dataEnc); 
+  const f = document.getElementById('formInventarioLavanderia');
+  f.id.value = item.id;
+  f.articulo.value = item.articulo;
+  f.unidad.value = item.unidad;
+  f.codigo.value = item.codigo;
+  f.estado.value = item.estado;
+  f.modelo.value = item.modelo || '';
+  f.responsable.value = item.responsable || '';
+  f.observaciones.value = item.observaciones || '';
+  document.getElementById('tituloFormInventario').textContent = 'Editar artículo: ' + item.codigo;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+window.eliminarInventarioLav = async function (id) {
+  if (!confirm('¿Eliminar este artículo del inventario?')) return;
+  await api(`/lavanderia/inventario/${id}`, { method: 'DELETE' });
+  lavanderia();
+};
+
+// --- FUNCIONES CONTROL DE BLANCOS ---
+async function guardarControlBlancos(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  const id = data.id; delete data.id;
+  data.cantidad = Number(data.cantidad);
+  
+  await api(id ? `/lavanderia/blancos/${id}` : '/lavanderia/blancos', {
+    method: id ? 'PATCH' : 'POST', body: JSON.stringify(data)
+  });
+  lavanderia();
+  setTimeout(() => cambiarTabLavanderia('blancos'), 100); 
+}
+
+window.editarControlBlancos = function (dataEnc) {
+  cambiarTabLavanderia('blancos');
+  const item = JSON.parse(dataEnc); 
+  const f = document.getElementById('formControlBlancos');
+  f.id.value = item.id;
+  f.articulo.value = item.articulo;
+  f.cantidad.value = item.cantidad;
+  f.estado.value = item.estado;
+  f.observaciones.value = item.observaciones || '';
+  document.getElementById('tituloFormBlancos').textContent = 'Modificar registro de blancos';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+window.eliminarControlBlancos = async function (id) {
+  if (!confirm('¿Eliminar este registro de movimientos?')) return;
+  await api(`/lavanderia/blancos/${id}`, { method: 'DELETE' });
+  lavanderia();
+  setTimeout(() => cambiarTabLavanderia('blancos'), 100); 
+};
